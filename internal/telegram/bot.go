@@ -17,6 +17,8 @@ type User struct {
 	MessagesList []int  `json:"messages_list"`
 }
 
+type UserMap map[string]User
+
 type Bot struct {
 	bot *tgbotapi.BotAPI
 }
@@ -80,28 +82,38 @@ func getMessagesList() []int {
 	return []int{0, 1, 2}
 }
 
-func addPerson(message *tgbotapi.Message) {
-	data := make(map[string]User)
-	raw, _ := os.ReadFile("data/users.json")
+func addPerson(message *tgbotapi.Message) error {
+	var data UserMap
 
-	if err := json.Unmarshal(raw, &data); err != nil {
-		panic(err)
+	raw, err := os.ReadFile("data/users.json")
+	if err != nil {
+		return fmt.Errorf("read file error: %w", err)
 	}
 
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return fmt.Errorf("unmarshal error: %w", err)
+	}
+
+	data.personData(message)
+
+	updated, err := json.MarshalIndent(data, "", " ")
+	if err != nil {
+		return fmt.Errorf("marshal error %w", err)
+	}
+
+	err = os.WriteFile("data/users.json", updated, 0644)
+	if err != nil {
+		return fmt.Errorf("write file error %w", err)
+	}
+
+	return nil
+}
+
+func (data UserMap) personData(message *tgbotapi.Message) {
 	chatID := strconv.FormatInt(message.Chat.ID, 10)
 	data[chatID] = User{
 		UserName:     message.From.UserName,
 		IsMessaging:  true,
 		MessagesList: getMessagesList(),
-	}
-
-	updated, err := json.MarshalIndent(data, "", " ")
-	if err != nil {
-		panic(err)
-	}
-
-	err = os.WriteFile("data/users.json", updated, 0644)
-	if err != nil {
-		panic(err)
 	}
 }
