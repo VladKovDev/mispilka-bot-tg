@@ -1,23 +1,12 @@
 package bot
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"mispilkabot/internal/services"
-	"os"
-	"strconv"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
-
-type User struct {
-	UserName     string `json:"user_name"`
-	IsMessaging  bool   `json:"is_messaging"`
-	MessagesList []int  `json:"messages_list"`
-}
-
-type UserMap map[string]User
 
 type Bot struct {
 	bot *tgbotapi.BotAPI
@@ -61,7 +50,7 @@ func (b *Bot) handleCommand(message *tgbotapi.Message) {
 
 	switch message.Command() {
 	case "start":
-		addPerson(message)
+		services.AddPerson(message)
 		msg.Text = "start command"
 	case "help":
 		msg.Text = "help command"
@@ -76,44 +65,4 @@ func (b *Bot) handleCommand(message *tgbotapi.Message) {
 
 func SendMessage(chatID string) {
 	fmt.Println(chatID)
-}
-
-func getMessagesList() []int {
-	return []int{0, 1, 2}
-}
-
-func addPerson(message *tgbotapi.Message) error {
-	var data UserMap
-
-	raw, err := os.ReadFile("data/users.json")
-	if err != nil {
-		return fmt.Errorf("read file error: %w", err)
-	}
-
-	if err := json.Unmarshal(raw, &data); err != nil {
-		return fmt.Errorf("unmarshal error: %w", err)
-	}
-
-	data.personData(message)
-
-	updated, err := json.MarshalIndent(data, "", " ")
-	if err != nil {
-		return fmt.Errorf("marshal error %w", err)
-	}
-
-	err = os.WriteFile("data/users.json", updated, 0644)
-	if err != nil {
-		return fmt.Errorf("write file error %w", err)
-	}
-
-	return nil
-}
-
-func (data UserMap) personData(message *tgbotapi.Message) {
-	chatID := strconv.FormatInt(message.Chat.ID, 10)
-	data[chatID] = User{
-		UserName:     message.From.UserName,
-		IsMessaging:  true,
-		MessagesList: getMessagesList(),
-	}
 }
