@@ -56,7 +56,7 @@ func getMessagesList() (messagesList []string, error error) {
 	if err != nil {
 		return messagesList, nil
 	}
-	return messages.MessagesList, nil
+	return messages.MessagesList.reverse(), nil
 }
 
 func (messagesList MessagesList) reverse() MessagesList {
@@ -81,7 +81,7 @@ func GetTiming(messageName string) ([]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	return  messageData.Timing, nil
+	return messageData.Timing, nil
 }
 
 func GetURLButton(messageName string) (URL string, text string, error error) {

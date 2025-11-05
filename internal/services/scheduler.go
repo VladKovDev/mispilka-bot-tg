@@ -8,22 +8,28 @@ import (
 	"time"
 )
 
-type Task struct {
-	ChatID string `json:"chatID"`
+type Tasks map[string]string
+
+func getScheduleBackup() (tasks Tasks, error error) {
+	raw, err := os.ReadFile("data/schedule_backup.json")
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(raw, &tasks); err != nil {
+		return nil, err
+	}
+	return tasks, nil
 }
 
-func backUpSchedule(chatID string, date string) error {
-	raw, err := os.ReadFile("data/schedule_backup.json")
+func backUpSchedule(chatID string, date time.Time) error {
+	tasks, err := getScheduleBackup()
 	if err != nil {
 		return err
 	}
 
-	var tasks map[string]interface{}
-	if err := json.Unmarshal(raw, &tasks); err != nil {
-		return err
-	}
+	dateStr := date.Format(time.RFC3339)
 
-	tasks[chatID] = date
+	tasks[chatID] = dateStr
 
 	updated, err := json.MarshalIndent(tasks, "", " ")
 	if err != nil {
@@ -44,76 +50,71 @@ func SetSchedules(sendMessage func(string)) error {
 		return err
 	}
 
-	var tasks map[string]interface{}
+	var tasks Tasks
 	if err := json.Unmarshal(raw, &tasks); err != nil {
 		return err
 	}
 	for k, v := range tasks {
-		sendTimeStr, ok := v.(string)
-		if !ok {
+		dateStr := v
+		date, err := time.Parse(time.RFC3339, dateStr)
+		if err != nil {
 			continue
 		}
-		setSchedule(sendTimeStr, k, sendMessage)
+		SetSchedule(date, k, sendMessage)
 	}
 	return nil
 }
 
-func setSchedule(sendTimeStr string, chatID string, sendMessage func(string)) {
-	sendTime, err := time.Parse(time.RFC3339, sendTimeStr)
-	if err != nil {
-		return
-	}
-
-	date := time.Until(sendTime)
-	if date <= 0 {
+func SetSchedule(sendTime time.Time, chatID string, sendMessage func(string)) {
+	delay := time.Until(sendTime)
+	if delay <= 0 {
 		sendMessage(chatID)
 		return
 	}
 
-	time.AfterFunc(date, func() {
+	time.AfterFunc(delay, func() {
 		sendMessage(chatID)
 	})
 }
 
-func SetNextSchedule(chatID string, sendMessage func(string)) {
-	user, err := GetPerson(chatID)
+func getDate(chatID string) (date time.Time, error error) {
+	tasks, err := getScheduleBackup()
 	if err != nil {
-		return
+		return date, nil
 	}
-
-	messagesList := user.MessagesList
-	n := len(messagesList)
-	if n == 0 {
-		return
+	dateStr, ok := tasks[chatID]
+	if ok {
+		date, err := time.Parse(time.RFC3339, dateStr)
+		if err != nil {
+			return date, err
+		}
+		return date, nil
+	} else {
+		return time.Now(), nil
 	}
-	last := messagesList[n-1]
+}
 
-	timing, err := GetTiming(last)
+func SetNextSchedule(chatID string, messageName string, sendMessage func(string)) {
+	timing, err := GetTiming(messageName)
 	if err != nil {
 		log.Printf("timing fetching error: %s", err)
 		return
 	}
+	now := time.Now()
 
-	sendTimeStr, err := setSendTime(user.RegTime, timing)
+	nextDate, err := setSendTime(now, timing)
 	if err != nil {
 		log.Printf("sendTime error: %s", err)
 		return
 	}
 
-	backUpSchedule(chatID, sendTimeStr)
+	backUpSchedule(chatID, nextDate)
 
-	setSchedule(sendTimeStr, chatID, sendMessage)
+	SetSchedule(nextDate, chatID, sendMessage)
 }
 
-func setSendTime(regTimeStr string, timing []int) (string, error) {
-	regTime, err := time.Parse(time.RFC3339, regTimeStr)
-	if err != nil {
-		return "", err
-	}
-
-	sendTime := regTime.Add(time.Duration(timing[0])*time.Hour +
+func setSendTime(now time.Time, timing []int) (time.Time, error) {
+	nextDate := now.Add(time.Duration(timing[0])*time.Hour +
 		time.Duration(timing[1])*time.Minute)
-
-	sendTimeStr := sendTime.Format(time.RFC3339)
-	return sendTimeStr, nil
+	return nextDate, nil
 }

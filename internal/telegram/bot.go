@@ -5,6 +5,7 @@ import (
 	"log"
 	"mispilkabot/internal/services"
 	"strconv"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -21,7 +22,7 @@ func (b *Bot) Start() {
 	log.Printf("Authorized on account %s", b.bot.Self.UserName)
 
 	err := services.SetSchedules(func(chatID string) {
-		b.SendMessage(chatID)
+		b.sendMessage(chatID)
 	})
 
 	if err != nil {
@@ -58,8 +59,13 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery) {
 	switch callback.Data {
 	case "accept":
 		accept(b, callback)
-	case "decline":
-		declaine(b, callback)
+	// case "decline":
+		// declaine(b, callback)
+	default:
+		callback := tgbotapi.NewCallback(callback.ID, "")
+        b.bot.Send(callback)
+        return
+    
 	}
 }
 
@@ -70,7 +76,8 @@ func accept(b *Bot, callBack *tgbotapi.CallbackQuery) {
 		callBack.Message.MessageID,
 		dataButton("✅Принято", "decline"))
 	b.bot.Send(edit)
-	services.SetNextSchedule(fmt.Sprint(callBack.From.ID), b.SendMessage)
+
+	services.SetSchedule(time.Now(), fmt.Sprint(callBack.From.ID), b.sendMessage)
 }
 
 func declaine(b *Bot, callBack *tgbotapi.CallbackQuery) {
@@ -99,9 +106,9 @@ func (b *Bot) handleCommand(message *tgbotapi.Message) {
 }
 
 func (b *Bot) startCommand(message *tgbotapi.Message) {
-	if services.IsNewPerson(fmt.Sprint(message.Chat.ID)){
+	if services.IsNewPerson(fmt.Sprint(message.Chat.ID)) {
 		err := services.AddPerson(message)
-		if err != nil{
+		if err != nil {
 			return
 		}
 	}
@@ -115,13 +122,13 @@ func (b *Bot) startCommand(message *tgbotapi.Message) {
 	msg := tgbotapi.NewMessage(message.Chat.ID, text)
 
 	userData, err := services.GetPerson(fmt.Sprint(message.Chat.ID))
-	if err == nil{
-		if userData.IsMessaging{
+	if err == nil {
+		if userData.IsMessaging {
 			msg.ReplyMarkup = dataButton("✅Принято", "decline")
-		}else{
+		} else {
 			msg.ReplyMarkup = dataButton("🔳Принять", "accept")
 		}
-	}else{
+	} else {
 		msg.ReplyMarkup = dataButton("🔳Принять", "accept")
 	}
 
@@ -131,7 +138,7 @@ func (b *Bot) startCommand(message *tgbotapi.Message) {
 
 }
 
-func (b *Bot) SendMessage(chatID string) {
+func (b *Bot) sendMessage(chatID string) {
 	data, err := services.GetPerson(chatID)
 	if err != nil {
 		log.Printf("person data fetching error: %v", err)
@@ -172,7 +179,12 @@ func (b *Bot) SendMessage(chatID string) {
 	data.MessagesList = data.MessagesList[:len(data.MessagesList)-1]
 	services.ChangePerson(chatID, data)
 
-	services.SetNextSchedule(chatID, b.SendMessage)
+	last, err = services.LastMessage(data.MessagesList)
+	if err != nil {
+		return
+	}
+
+	services.SetNextSchedule(chatID, last, b.sendMessage)
 }
 
 func linkButton(url string, buttonText string) tgbotapi.InlineKeyboardMarkup {
