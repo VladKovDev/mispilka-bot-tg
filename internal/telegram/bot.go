@@ -78,7 +78,7 @@ func (b *Bot) SendMessage(chatID string) {
 		return
 	}
 
-	last, err := lastMessage(data)
+	last, err := services.LastMessage(data.MessagesList)
 	if err != nil{
 		return
 	}
@@ -90,6 +90,16 @@ func (b *Bot) SendMessage(chatID string) {
 	}
 
 	msg := tgbotapi.NewMessage(parseID(chatID), text)
+
+	url, buttonText, err := services.GetUrlButton(last)
+	if err != nil{
+		return 
+	}
+	if !(url == "" || buttonText == ""){
+		keyboard := linkButton(url, buttonText)
+		msg.ReplyMarkup = keyboard
+	}
+
 	if _, err := b.bot.Send(msg); err != nil {
 		log.Printf("send error to %s: %v", chatID, err)
 		return
@@ -101,14 +111,11 @@ func (b *Bot) SendMessage(chatID string) {
 	services.SetNextSchedule(chatID, b.SendMessage)
 }
 
-func lastMessage(data services.User)(string, error){
-	messagesList := data.MessagesList
-	n := len(messagesList)
-	if n == 0{
-		return "", fmt.Errorf("messagesList is empty")
-	}
-	last := messagesList[n-1]
-	return last, nil
+
+func linkButton(url string, buttonText string)tgbotapi.InlineKeyboardMarkup{
+	urlBtn := tgbotapi.NewInlineKeyboardButtonURL(buttonText, url)
+	row := tgbotapi.NewInlineKeyboardRow(urlBtn)
+	return tgbotapi.NewInlineKeyboardMarkup(row)
 }
 
 func parseID(s string) int64 {

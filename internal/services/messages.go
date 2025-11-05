@@ -7,9 +7,14 @@ import (
 	"os"
 )
 
+type MessageData struct {
+	Timing    []int    `json:"timing"`
+	UrlButton []string `json:"url_button"`
+}
+
 type MessagesList []string
 
-type MessageMap map[string][]int
+type MessageMap map[string]MessageData
 
 func getMessagesData() (MessageMap, error) {
 	var data MessageMap
@@ -69,5 +74,29 @@ func GetTiming(messageName string) ([]int, error) {
 		return nil, err
 	}
 
-	return data[messageName], nil
+	messageData := data[messageName]
+	timing := messageData.Timing
+
+	return timing, nil
+}
+
+func GetUrlButton(messageName string) (url string, text string, error error) {
+	data, err := getMessagesData()
+	if err != nil {
+		return "", "", err
+	}
+
+	messageData := data[messageName]
+	url_button := messageData.UrlButton
+
+	return url_button[0], url_button[1], nil
+}
+
+func LastMessage(messagesList MessagesList) (string, error) {
+	n := len(messagesList)
+	if n == 0 {
+		return "", fmt.Errorf("messagesList is empty")
+	}
+	last := messagesList[n-1]
+	return last, nil
 }
