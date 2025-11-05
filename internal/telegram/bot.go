@@ -40,6 +40,11 @@ func (b *Bot) initUpdatesChanel() tgbotapi.UpdatesChannel {
 
 func (b *Bot) handleUpdates(updates tgbotapi.UpdatesChannel) {
 	for update := range updates {
+		if update.CallbackQuery != nil {
+			callback := update.CallbackQuery
+			b.handleCallbackQuery(callback)
+
+		}
 		if update.Message == nil {
 			continue
 		}
@@ -49,12 +54,37 @@ func (b *Bot) handleUpdates(updates tgbotapi.UpdatesChannel) {
 	}
 }
 
+func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery) {
+	switch callback.Data {
+	case "accept":
+		accept(b, callback)
+	case "decline":
+		declaine(b, callback)
+	}
+}
+
+func accept(b *Bot, callBack *tgbotapi.CallbackQuery) {
+	edit := tgbotapi.NewEditMessageReplyMarkup(
+		callBack.From.ID,
+		callBack.Message.MessageID,
+		dataButton("✅Принято", "decline"))
+	b.bot.Send(edit)
+}
+
+func declaine(b *Bot, callBack *tgbotapi.CallbackQuery) {
+	edit := tgbotapi.NewEditMessageReplyMarkup(
+		callBack.From.ID,
+		callBack.Message.MessageID,
+		dataButton("🔳Принять", "accept"))
+	b.bot.Send(edit)
+}
+
 func (b *Bot) handleCommand(message *tgbotapi.Message) {
 	msg := tgbotapi.NewMessage(message.Chat.ID, "")
 
 	switch message.Command() {
 	case "start":
-		services.AddPerson(message)
+		b.startCommand(message)
 	case "help":
 		chatID := message.Chat.ID
 		services.SetNextSchedule(fmt.Sprint(chatID), b.SendMessage)
@@ -63,6 +93,22 @@ func (b *Bot) handleCommand(message *tgbotapi.Message) {
 		if _, err := b.bot.Send(msg); err != nil {
 			log.Panic(err)
 		}
+	}
+}
+
+func (b *Bot) startCommand(message *tgbotapi.Message) {
+	text, err := services.GetMessage("start")
+	if err != nil {
+		log.Printf("message fetching error: %v", err)
+		return
+	}
+
+	msg := tgbotapi.NewMessage(message.Chat.ID, text)
+
+	msg.ReplyMarkup = dataButton("🔳Принять", "accept")
+
+	if _, err := b.bot.Send(msg); err != nil {
+		log.Panic(err)
 	}
 
 }
@@ -74,12 +120,12 @@ func (b *Bot) SendMessage(chatID string) {
 		return
 	}
 
-	if !data.IsMessaging{
+	if !data.IsMessaging {
 		return
 	}
 
 	last, err := services.LastMessage(data.MessagesList)
-	if err != nil{
+	if err != nil {
 		return
 	}
 
@@ -92,10 +138,10 @@ func (b *Bot) SendMessage(chatID string) {
 	msg := tgbotapi.NewMessage(parseID(chatID), text)
 
 	url, buttonText, err := services.GetUrlButton(last)
-	if err != nil{
-		return 
+	if err != nil {
+		return
 	}
-	if !(url == "" || buttonText == ""){
+	if !(url == "" || buttonText == "") {
 		keyboard := linkButton(url, buttonText)
 		msg.ReplyMarkup = keyboard
 	}
@@ -111,10 +157,15 @@ func (b *Bot) SendMessage(chatID string) {
 	services.SetNextSchedule(chatID, b.SendMessage)
 }
 
-
-func linkButton(url string, buttonText string)tgbotapi.InlineKeyboardMarkup{
+func linkButton(url string, buttonText string) tgbotapi.InlineKeyboardMarkup {
 	urlBtn := tgbotapi.NewInlineKeyboardButtonURL(buttonText, url)
 	row := tgbotapi.NewInlineKeyboardRow(urlBtn)
+	return tgbotapi.NewInlineKeyboardMarkup(row)
+}
+
+func dataButton(text string, calldata string) tgbotapi.InlineKeyboardMarkup {
+	btn := tgbotapi.NewInlineKeyboardButtonData(text, calldata)
+	row := tgbotapi.NewInlineKeyboardRow(btn)
 	return tgbotapi.NewInlineKeyboardMarkup(row)
 }
 
