@@ -62,9 +62,9 @@ func AddPerson(message *tgbotapi.Message) error {
 }
 
 func (data UserMap) personData(message *tgbotapi.Message) {
-	messagesList, err := getMessagesList()
 	t := time.Now()
 	strTime := t.Format(time.RFC3339)
+	messagesList, err := getMessagesList()
 	if err != nil {
 		log.Printf("get messagesList error %v", err)
 	}

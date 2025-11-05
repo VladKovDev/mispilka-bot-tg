@@ -70,6 +70,7 @@ func accept(b *Bot, callBack *tgbotapi.CallbackQuery) {
 		callBack.Message.MessageID,
 		dataButton("✅Принято", "decline"))
 	b.bot.Send(edit)
+	services.SetNextSchedule(fmt.Sprint(callBack.From.ID), b.SendMessage)
 }
 
 func declaine(b *Bot, callBack *tgbotapi.CallbackQuery) {
@@ -88,8 +89,7 @@ func (b *Bot) handleCommand(message *tgbotapi.Message) {
 	case "start":
 		b.startCommand(message)
 	case "help":
-		chatID := message.Chat.ID
-		services.SetNextSchedule(fmt.Sprint(chatID), b.SendMessage)
+		services.AddPerson(message)
 	default:
 		msg.Text = "I don't know that command"
 		if _, err := b.bot.Send(msg); err != nil {
@@ -106,7 +106,7 @@ func (b *Bot) startCommand(message *tgbotapi.Message) {
 		}
 	}
 
-	text, err := services.GetMessage("start")
+	text, err := services.GetMessageText("start")
 	if err != nil {
 		log.Printf("message fetching error: %v", err)
 		return
@@ -147,7 +147,7 @@ func (b *Bot) SendMessage(chatID string) {
 		return
 	}
 
-	text, err := services.GetMessage(last)
+	text, err := services.GetMessageText(last)
 	if err != nil {
 		log.Printf("message fetching error: %v", err)
 		return
@@ -155,7 +155,7 @@ func (b *Bot) SendMessage(chatID string) {
 
 	msg := tgbotapi.NewMessage(parseID(chatID), text)
 
-	url, buttonText, err := services.GetUrlButton(last)
+	url, buttonText, err := services.GetURLButton(last)
 	if err != nil {
 		return
 	}

@@ -7,59 +7,67 @@ import (
 	"os"
 )
 
-type MessageData struct {
-	Timing    []int    `json:"timing"`
-	UrlButton []string `json:"url_button"`
-}
-
 type MessagesList []string
 
+type MessageData struct {
+	Timing    []int    `json:"timing"`
+	URLButton []string `json:"url_button"`
+}
 type MessageMap map[string]MessageData
 
-func getMessagesData() (MessageMap, error) {
-	var data MessageMap
+type Messages struct {
+	MessagesList MessagesList `json:"messages_list"`
+	Messages     MessageMap   `json:"messages"`
+}
 
+func getMessages() (messages Messages, error error) {
 	raw, err := os.ReadFile("data/messages.json")
 	if err != nil {
 		log.Printf("readfile error: %v", err)
-		return nil, err
+		return messages, err
 	}
 
-	err = json.Unmarshal(raw, &data)
+	err = json.Unmarshal(raw, &messages)
 	if err != nil {
 		log.Printf("unmarshal error: %v", err)
-		return nil, err
+		return messages, err
 	}
-	return data, nil
+	return messages, nil
 }
 
-func getMessagesList() ([]string, error) {
-	var messagesList []string
-	data, err := getMessagesData()
+func getMessageMap() (messageMap MessageMap, error error) {
+	messages, err := getMessages()
 	if err != nil {
-		log.Printf("message data fetching error: %s", err)
-		return messagesList, err
+		return messageMap, err
 	}
-	messagesList = data.getList().reverse()
-	return messagesList, nil
+	return messages.Messages, nil
 }
 
-func (data MessagesList) reverse() MessagesList {
-	for i := 0; i < len(data)/2; i++ {
-		j := len(data) - 1 - i
-		data[i], data[j] = data[j], data[i]
+func getMessageData(messageName string) (messageData MessageData, error error) {
+	messageMap, err := getMessageMap()
+	if err != nil {
+		return messageData, err
 	}
-	return data
+	return messageMap[messageName], nil
 }
 
-func (data MessageMap) getList() (keys MessagesList) {
-	for k := range data {
-		keys = append(keys, k)
+func getMessagesList() (messagesList []string, error error) {
+	messages, err := getMessages()
+	if err != nil {
+		return messagesList, nil
 	}
-	return keys
+	return messages.MessagesList, nil
 }
 
-func GetMessage(messageName string) (string, error) {
+func (messagesList MessagesList) reverse() MessagesList {
+	for i := 0; i < len(messagesList)/2; i++ {
+		j := len(messagesList) - 1 - i
+		messagesList[i], messagesList[j] = messagesList[j], messagesList[i]
+	}
+	return messagesList
+}
+
+func GetMessageText(messageName string) (string, error) {
 	path := fmt.Sprintf("data/messages/%s.md", messageName)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -69,27 +77,20 @@ func GetMessage(messageName string) (string, error) {
 }
 
 func GetTiming(messageName string) ([]int, error) {
-	data, err := getMessagesData()
+	messageData, err := getMessageData(messageName)
 	if err != nil {
 		return nil, err
 	}
-
-	messageData := data[messageName]
-	timing := messageData.Timing
-
-	return timing, nil
+	return  messageData.Timing, nil
 }
 
-func GetUrlButton(messageName string) (url string, text string, error error) {
-	data, err := getMessagesData()
+func GetURLButton(messageName string) (URL string, text string, error error) {
+	messageData, err := getMessageData(messageName)
 	if err != nil {
 		return "", "", err
 	}
-
-	messageData := data[messageName]
-	url_button := messageData.UrlButton
-
-	return url_button[0], url_button[1], nil
+	URL_button := messageData.URLButton
+	return URL_button[0], URL_button[1], nil
 }
 
 func LastMessage(messagesList MessagesList) (string, error) {
