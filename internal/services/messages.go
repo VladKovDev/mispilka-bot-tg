@@ -51,10 +51,11 @@ func getMessageData(messageName string) (messageData MessageData, error error) {
 	return messageMap[messageName], nil
 }
 
-func getMessagesList() (messagesList []string, error error) {
+func getMessagesList() (MessagesList, error) {
+	var messagesList MessagesList
 	messages, err := getMessages()
 	if err != nil {
-		return messagesList, nil
+		return messagesList, err
 	}
 	return messages.MessagesList.reverse(), nil
 }

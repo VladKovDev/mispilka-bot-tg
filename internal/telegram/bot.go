@@ -72,7 +72,7 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery) {
 }
 
 func accept(b *Bot, callBack *tgbotapi.CallbackQuery) {
-	services.ChangeIsMessagingStatus(fmt.Sprint(callBack.From.ID), true)
+	services.ChangeIsMessaging(fmt.Sprint(callBack.From.ID), true)
 	edit := tgbotapi.NewEditMessageReplyMarkup(
 		callBack.From.ID,
 		callBack.Message.MessageID,
@@ -83,7 +83,7 @@ func accept(b *Bot, callBack *tgbotapi.CallbackQuery) {
 }
 
 func declaine(b *Bot, callBack *tgbotapi.CallbackQuery) {
-	services.ChangeIsMessagingStatus(fmt.Sprint(callBack.From.ID), false)
+	services.ChangeIsMessaging(fmt.Sprint(callBack.From.ID), false)
 	edit := tgbotapi.NewEditMessageReplyMarkup(
 		callBack.From.ID,
 		callBack.Message.MessageID,
@@ -97,8 +97,10 @@ func (b *Bot) handleCommand(message *tgbotapi.Message) {
 	switch message.Command() {
 	case "start":
 		b.startCommand(message)
-	case "help":
-		services.AddPerson(message)
+	case "restart":
+		if err := services.AddUser(message); err != nil {
+			log.Printf("Failed to add user: %v", err)
+		}
 	default:
 		msg.Text = "I don't know that command"
 		if _, err := b.bot.Send(msg); err != nil {
@@ -108,8 +110,8 @@ func (b *Bot) handleCommand(message *tgbotapi.Message) {
 }
 
 func (b *Bot) startCommand(message *tgbotapi.Message) {
-	if services.IsNewPerson(fmt.Sprint(message.Chat.ID)) {
-		err := services.AddPerson(message)
+	if services.IsNewUser(fmt.Sprint(message.Chat.ID)) {
+		err := services.AddUser(message)
 		if err != nil {
 			return
 		}
@@ -127,7 +129,7 @@ func (b *Bot) startCommand(message *tgbotapi.Message) {
 	// 	Media:  media,
 	// }
 
-	userData, err := services.GetPerson(fmt.Sprint(message.Chat.ID))
+	userData, err := services.GetUser(fmt.Sprint(message.Chat.ID))
 	if err == nil {
 		if userData.IsMessaging {
 			msg.ReplyMarkup = dataButton("✅ Принято", "decline")
@@ -152,7 +154,7 @@ func (b *Bot) startCommand(message *tgbotapi.Message) {
 }
 
 func (b *Bot) sendMessage(chatID string) {
-	data, err := services.GetPerson(chatID)
+	data, err := services.GetUser(chatID)
 	if err != nil {
 		log.Printf("person data fetching error: %v", err)
 		return
@@ -204,7 +206,7 @@ func (b *Bot) sendMessage(chatID string) {
 	}
 
 	data.MessagesList = data.MessagesList[:len(data.MessagesList)-1]
-	services.ChangePerson(chatID, data)
+	services.ChangeUser(chatID, data)
 
 	last, err = services.LastMessage(data.MessagesList)
 	if err != nil {

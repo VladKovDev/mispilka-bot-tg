@@ -1,10 +1,8 @@
 package services
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"strconv"
 	"time"
 
@@ -12,126 +10,97 @@ import (
 )
 
 type User struct {
-	UserName     string   `json:"user_name"`
-	RegTime      string   `json:"reg_time"`
-	IsMessaging  bool     `json:"is_messaging"`
-	MessagesList []string `json:"messages_list"`
+	UserName     string    `json:"user_name"`
+	RegTime      time.Time `json:"reg_time"`
+	IsMessaging  bool      `json:"is_messaging"`
+	MessagesList []string  `json:"messages_list"`
 }
 
 type UserMap map[string]User
 
-func getUsers()(data UserMap){
-	raw, err := os.ReadFile("data/users.json")
+func AddUser(message *tgbotapi.Message) error {
+	data, err := ReadJSONRetry[UserMap]("data/users.json", 3)
 	if err != nil {
-		log.Printf("read file error %v", err)
-		return
+		return err
 	}
 
-	if err := json.Unmarshal(raw, &data); err != nil {
-		log.Printf("unmarshal error %v", err)
-		return
+	data.userData(message)
+
+	if err = WriteJSONRetry[UserMap]("data/users.json", data, 3); err != nil {
+		return err
 	}
-	return data
-}
-
-func AddPerson(message *tgbotapi.Message) error {
-	var data UserMap
-
-	raw, err := os.ReadFile("data/users.json")
-	if err != nil {
-		return fmt.Errorf("read file error: %w", err)
-	}
-
-	if err := json.Unmarshal(raw, &data); err != nil {
-		return fmt.Errorf("unmarshal error: %w", err)
-	}
-
-	data.personData(message)
-
-	updated, err := json.MarshalIndent(data, "", " ")
-	if err != nil {
-		return fmt.Errorf("marshal error %w", err)
-	}
-
-	err = os.WriteFile("data/users.json", updated, 0644)
-	if err != nil {
-		return fmt.Errorf("write file error %w", err)
-	}
-
 	return nil
 }
 
-func (data UserMap) personData(message *tgbotapi.Message) {
+func (data UserMap) userData(message *tgbotapi.Message) error {
 	t := time.Now()
-	strTime := t.Format(time.RFC3339)
 	messagesList, err := getMessagesList()
 	if err != nil {
-		log.Printf("get messagesList error %v", err)
+		return err
 	}
 	chatID := strconv.FormatInt(message.Chat.ID, 10)
 	data[chatID] = User{
 		UserName:     message.From.UserName,
-		RegTime:      strTime,
+		RegTime:      t,
 		IsMessaging:  false,
 		MessagesList: messagesList,
 	}
+	return nil
 }
 
-func GetPerson(chatID string) (User, error) {
-	var data UserMap
+func GetUser(chatID string) (User, error) {
+	var users UserMap
 	var user User
 
-	raw, err := os.ReadFile("data/users.json")
+	users, err := ReadJSONRetry[UserMap]("data/users.json", 3)
 	if err != nil {
-		log.Printf("readfile error: %v", err)
 		return user, err
 	}
 
-	if err := json.Unmarshal(raw, &data); err != nil {
-		log.Printf("unmarshal error: %v", err)
-		return user, err
+	user, ok := users[chatID]
+	if !ok {
+		return user, fmt.Errorf("user not found")
 	}
-
-	user = data[chatID]
-	return user, err
+	return user, nil
 }
 
-func ChangeIsMessagingStatus(chatID string, status bool){
-	userData, err := GetPerson(chatID)
-	if err != nil{
-		log.Printf("get person error %v", err)
-		return
+func ChangeIsMessaging(chatID string, status bool) error {
+	userData, err := GetUser(chatID)
+	if err != nil {
+		return err
 	}
-
 	userData.IsMessaging = status
-
-	ChangePerson(chatID, userData)
+	err = ChangeUser(chatID, userData)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func ChangePerson(chatID string, userData User) {
-	users := getUsers()
+func ChangeUser(chatID string, userData User) error {
+	users, err := ReadJSONRetry[UserMap]("data/users.json", 3)
+	if err != nil {
+		return err
+	}
 
 	users[chatID] = userData
 
-	updated, err := json.MarshalIndent(users, "", " ")
-	if err != nil {
-		log.Printf("marshal error %v", err)
-		return
+	if err := WriteJSONRetry[UserMap]("data/users.json", users, 3); err != nil {
+		return err
 	}
-
-	err = os.WriteFile("data/users.json", updated, 0644)
-	if err != nil {
-		log.Printf("write file error %v", err)
-		return
-	}
+	return nil
 }
 
-func IsNewPerson(chatID string)bool{
-	users := getUsers()
-	_, ok := users[chatID]
-	if ok{
+func IsNewUser(chatID string) bool {
+	users, err := ReadJSON[UserMap]("data/users.json")
+	if err != nil {
+		log.Printf("Failed to load users: %v", err)
 		return false
-	}else{
+	}
+	_, ok := users[chatID]
+	if ok {
+		return false
+	} else {
 		return true
 	}
 }
