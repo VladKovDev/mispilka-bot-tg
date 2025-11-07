@@ -24,6 +24,10 @@ func NewBot(bot *tgbotapi.BotAPI) *Bot {
 func (b *Bot) Start() {
 	log.Printf("Authorized on account %s", b.bot.Self.UserName)
 
+	services.CheckStorage("data/users.json")
+	services.CheckStorage("data/schedule_backup.json")
+	services.CheckStorage("data/messages.json")
+
 	err := services.SetSchedules(func(chatID string) {
 		b.sendMessage(chatID)
 	})

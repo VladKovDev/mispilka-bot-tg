@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"time"
 )
@@ -50,10 +51,30 @@ func ReadJSONRetry[T any](path string, attempts int) (T, error) {
 func WriteJSONRetry[T any](path string, data T, attempts int) error {
 	var err error
 	for i := 0; i < attempts; i++ {
-		err = WriteJSON[T](path, data)
+		err = WriteJSON(path, data)
 		if err == nil {
 			return nil
 		}
 	}
 	return fmt.Errorf("WriteJSON failed after %d attempts: %w", attempts, err)
+}
+
+
+func CheckStorage(path string)error{
+	_, err := os.Stat(path)
+	if err != nil || os.IsNotExist(err) {
+		_, err = os.Create(path)
+		if err == nil {
+			log.Printf("create file: %v", path)
+		}
+		v := struct{}{}
+		if err := WriteJSON(path, v); err != nil{
+			return err
+		}
+	}
+	return nil
+
+	// if _, err := ReadJSONRetry[any](path, 3); err != nil{
+	// 	panic(err)
+	// }
 }
