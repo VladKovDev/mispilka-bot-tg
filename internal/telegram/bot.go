@@ -1,11 +1,11 @@
-package bot
+package telegram
 
 import (
 	"fmt"
 	"log"
 	"mispilkabot/internal/services"
+	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -36,7 +36,9 @@ func (b *Bot) Start() {
 		fmt.Printf("SetSchedules error: %v", err)
 	}
 
-	b.handleUpdates(b.initUpdatesChanel())
+	privateChatID := parseID(os.Getenv("PRIVATE_GROUP_ID"))
+
+	b.handleUpdates(b.initUpdatesChanel(), privateChatID)
 }
 
 func (b *Bot) initUpdatesChanel() tgbotapi.UpdatesChannel {
@@ -46,8 +48,17 @@ func (b *Bot) initUpdatesChanel() tgbotapi.UpdatesChannel {
 	return b.bot.GetUpdatesChan(u)
 }
 
-func (b *Bot) handleUpdates(updates tgbotapi.UpdatesChannel) {
+func (b *Bot) handleUpdates(updates tgbotapi.UpdatesChannel, privateChatID int64) {
 	for update := range updates {
+		chatID := update.FromChat().ID
+		if chatID == privateChatID {
+			if update.Message != nil && len(update.Message.NewChatMembers) > 0 {
+				for _, newUser := range update.Message.NewChatMembers {
+					services.ChangeIsMessaging(fmt.Sprint(newUser.ID), false)
+				}
+			}
+			continue
+		}
 		if update.CallbackQuery != nil {
 			callback := update.CallbackQuery
 			b.handleCallbackQuery(callback)
@@ -96,67 +107,6 @@ func declaine(b *Bot, callBack *tgbotapi.CallbackQuery) {
 	b.bot.Send(edit)
 }
 
-func (b *Bot) handleCommand(message *tgbotapi.Message) {
-	msg := tgbotapi.NewMessage(message.Chat.ID, "")
-	lowerCommand := strings.ToLower(message.Command())
-	switch lowerCommand {
-	case "start":
-		b.startCommand(message)
-	case "restart":
-		if err := services.AddUser(message); err != nil {
-			log.Printf("Failed to add user: %v", err)
-		}
-	default:
-		msg.Text = "I don't know that command"
-		if _, err := b.bot.Send(msg); err != nil {
-			log.Panic(err)
-		}
-	}
-}
-
-func (b *Bot) startCommand(message *tgbotapi.Message) {
-	if services.IsNewUser(fmt.Sprint(message.Chat.ID)) {
-		err := services.AddUser(message)
-		if err != nil {
-			return
-		}
-	}
-
-	text, err := services.GetMessageText("start")
-	if err != nil {
-		log.Printf("message fetching error: %v", err)
-		return
-	}
-	msg := tgbotapi.NewMessage(message.Chat.ID, text)
-	// media := getMedia()
-	// group := tgbotapi.MediaGroupConfig{
-	// 	ChatID: message.Chat.ID,
-	// 	Media:  media,
-	// }
-
-	userData, err := services.GetUser(fmt.Sprint(message.Chat.ID))
-	if err == nil {
-		if userData.IsMessaging {
-			msg.ReplyMarkup = dataButton("✅ Принято", "decline")
-		} else {
-			msg.ReplyMarkup = dataButton("🔲 Принимаю", "accept")
-		}
-	} else {
-		msg.ReplyMarkup = dataButton("🔲 Принимаю", "accept")
-	}
-
-	// _, err = b.bot.SendMediaGroup(group)
-	// if err != nil {
-	// 	log.Printf("send mediagroup error: %s", err)
-	// 	return
-	// }
-	msg.ParseMode = "HTML"
-	if _, err := b.bot.Send(msg); err != nil {
-		log.Printf("message send error: %s", err)
-		return
-	}
-
-}
 
 func (b *Bot) sendMessage(chatID string) {
 	data, err := services.GetUser(chatID)
