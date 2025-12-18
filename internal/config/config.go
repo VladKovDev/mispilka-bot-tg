@@ -28,8 +28,15 @@ type DatabaseConfig struct {
 }
 
 type LoggerConfig struct {
-	Level  string `mapstructure:"level"`
-	Pretty bool   `mapstructure:"pretty"`
+	Level        string `mapstructure:"level"`
+	Format       string `mapstructure:"format"`
+	Output       string `mapstructure:"output"`
+	EnableColors bool   `mapstructure:"enable_colors"`
+	FilePath     string `mapstructure:"file_path"`
+	MaxSize      int    `mapstructure:"max_size"`
+	MaxBackups   int    `mapstructure:"max_backups"`
+	MaxAge       int    `mapstructure:"max_age"`
+	Compress     bool   `mapstructure:"compress"`
 }
 
 type Loader interface {
@@ -50,7 +57,6 @@ func NewViperLoader(configPath string, validator Validator) Loader {
 		validator:  validator,
 	}
 }
-
 
 func (l *viperLoader) Load(ctx context.Context) (*Config, error) {
 	cfg := SetDefaultConfig()
@@ -110,7 +116,14 @@ func (l *viperLoader) BindEnvVariables(v *viper.Viper) {
 	_ = v.BindEnv("database.max_idle_conns")
 	// Logger
 	_ = v.BindEnv("logger.level")
-	_ = v.BindEnv("logger.pretty")
+	_ = v.BindEnv("logger.format")
+	_ = v.BindEnv("logger.output")
+	_ = v.BindEnv("logger.enable_colors")
+	_ = v.BindEnv("logger.file_path")
+	_ = v.BindEnv("logger.max_size")
+	_ = v.BindEnv("logger.max_backups")
+	_ = v.BindEnv("logger.max_age")
+	_ = v.BindEnv("logger.compress")
 }
 
 func Load(configPath string, ctx context.Context) (*Config, error) {
@@ -118,7 +131,7 @@ func Load(configPath string, ctx context.Context) (*Config, error) {
 	return loader.Load(ctx)
 }
 
-func (c *DatabaseConfig) GetDatabaseDSN()string{
+func (c *DatabaseConfig) GetDatabaseDSN() string {
 	return fmt.Sprintf(
 		"%s:%s@%s:%d/%s?sslmode=%s",
 		c.User,
@@ -129,4 +142,3 @@ func (c *DatabaseConfig) GetDatabaseDSN()string{
 		c.SSLMode,
 	)
 }
-

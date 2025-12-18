@@ -1,9 +1,12 @@
 database:
   port: 5432
   name: promo_bots
-  sslmode: disable
-  max_open_conns: 5
+  sslmode: require
+  max_open_conns: 20
+  max_idle_conns: 10
 
 logger:
-  level: info
-  pretty: false
+  level: warn
+  format: json
+  output: stdout
+  enable_colors: false

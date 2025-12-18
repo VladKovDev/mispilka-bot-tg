@@ -58,7 +58,7 @@ func (v validator) validateDatabase(database DatabaseConfig) error {
 		return fmt.Errorf("max open conns must be at least 1, got: %v", database.MaxOpenConns)
 	}
 
-	if database.MaxIdleConns < 0{
+	if database.MaxIdleConns < 0 {
 		return fmt.Errorf("max idle conns must be non-negative, got: %v", database.MaxIdleConns)
 	}
 
@@ -74,6 +74,35 @@ func (v validator) validateLogger(logger LoggerConfig) error {
 	}
 	if !validLevels[logger.Level] {
 		return fmt.Errorf("logger level must be (debug, info, warn, error), got: %v", logger.Level)
+	}
+
+	validFormats := map[string]bool{
+		"console": true,
+		"json":    true,
+	}
+	if !validFormats[logger.Format] {
+		return fmt.Errorf("logger format must be (string, json), got: %v", logger.Format)
+	}
+
+	validOutputs := map[string]bool{
+		"stdout": true,
+		"stderr": true,
+		"file":   true,
+	}
+	if !validOutputs[logger.Output] {
+		return fmt.Errorf("logger output must be (stdout, stderr), got: %v", logger.Output)
+	}
+
+	if logger.Output == "file" && logger.FilePath == "" {
+		return fmt.Errorf("logger file_path required when output is 'file'")
+	}
+
+	if logger.MaxBackups < 0 {
+		return fmt.Errorf("logger max backups must be non-negative, got: %v", logger.MaxBackups)
+	}
+
+	if logger.MaxAge < 0 {
+		return fmt.Errorf("logger max age must be non-negative, got: %v", logger.MaxAge)
 	}
 
 	return nil
