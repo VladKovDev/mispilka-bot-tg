@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -17,14 +18,17 @@ type Config struct {
 }
 
 type DatabaseConfig struct {
-	Host         string `mapstructure:"host"`
-	Port         int    `mapstructure:"port"`
-	User         string `mapstructure:"user"`
-	Password     string `mapstructure:"password"`
-	Name         string `mapstructure:"name"`
-	SSLMode      string `mapstructure:"sslmode"`
-	MaxOpenConns int    `mapstructure:"max_open_conns"`
-	MaxIdleConns int    `mapstructure:"max_idle_conns"`
+	Host              string        `mapstructure:"host"`
+	Port              int           `mapstructure:"port"`
+	User              string        `mapstructure:"user"`
+	Password          string        `mapstructure:"password"`
+	Name              string        `mapstructure:"name"`
+	SSLMode           string        `mapstructure:"sslmode"`
+	MaxOpenConns      int           `mapstructure:"max_open_conns"`
+	MaxIdleConns      int           `mapstructure:"max_idle_conns"`
+	ConnMaxLifetime   time.Duration `mapstructure:"conn_max_lifetime"`
+	ConnMaxIdleTime   time.Duration `mapstructure:"conn_max_idle_time"`
+	HealthCheckPeriod time.Duration `mapstructure:"health_check_period"`
 }
 
 type LoggerConfig struct {
@@ -124,6 +128,9 @@ func (l *viperLoader) BindEnvVariables(v *viper.Viper) {
 	_ = v.BindEnv("logger.max_backups")
 	_ = v.BindEnv("logger.max_age")
 	_ = v.BindEnv("logger.compress")
+	_ = v.BindEnv("logger.conn_max_lifetime")
+	_ = v.BindEnv("logger.conn_max_idle_time")
+	_ = v.BindEnv("logger.health_check_period")
 }
 
 func Load(configPath string, ctx context.Context) (*Config, error) {

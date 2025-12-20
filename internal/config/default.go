@@ -1,5 +1,7 @@
 package config
 
+import "time"
+
 func SetDefaultConfig() *Config {
 	return &Config{
 		Database: DatabaseConfig{
@@ -11,6 +13,9 @@ func SetDefaultConfig() *Config {
 			SSLMode:      "require",
 			MaxOpenConns: 10,
 			MaxIdleConns: 5,
+			ConnMaxLifetime: 1 * time.Hour,
+			ConnMaxIdleTime: 15 * time.Minute,
+			HealthCheckPeriod: 1 * time.Minute,
 		},
 		Logger: LoggerConfig{
 			Level:        "info",

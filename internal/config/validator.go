@@ -61,6 +61,17 @@ func (v validator) validateDatabase(database DatabaseConfig) error {
 	if database.MaxIdleConns < 0 {
 		return fmt.Errorf("max idle conns must be non-negative, got: %v", database.MaxIdleConns)
 	}
+	if database.MaxIdleConns > database.MaxOpenConns {
+		return fmt.Errorf("max_idle_conns (%d) cannot exceed max_open_conns (%d)", database.MaxIdleConns, database.MaxOpenConns)
+	}
+
+	if database.ConnMaxLifetime < 0 {
+		return fmt.Errorf("conn_max_lifetime must be positive, got %v", database.ConnMaxLifetime)
+	}
+
+	if database.ConnMaxIdleTime < 0 {
+		return fmt.Errorf("conn_max_idle_time must be positive, got %v", database.ConnMaxIdleTime)
+	}
 
 	return nil
 }
