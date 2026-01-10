@@ -3,9 +3,10 @@ package telegram
 import (
 	"fmt"
 	"log"
+	"mispilkabot/config"
 	"mispilkabot/internal/services"
-	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -13,12 +14,37 @@ import (
 
 type Bot struct {
 	bot *tgbotapi.BotAPI
+	cfg *config.Config
 }
 
 type Media []interface{}
 
-func NewBot(bot *tgbotapi.BotAPI) *Bot {
-	return &Bot{bot: bot}
+func NewBot(bot *tgbotapi.BotAPI, cfg *config.Config) *Bot {
+	return &Bot{bot: bot, cfg: cfg}
+}
+
+// GetToken returns the bot token for use in direct API calls
+func (b *Bot) GetToken() string {
+	return b.bot.Token
+}
+
+// GenerateInviteLink creates a new invite link for the specified group
+func (b *Bot) GenerateInviteLink(chatID, groupID string) (string, error) {
+	return services.GenerateInviteLink(chatID, groupID, b.bot.Token)
+}
+
+// RevokeInviteLink revokes an existing invite link
+func (b *Bot) RevokeInviteLink(inviteLink string) error {
+	return services.RevokeInviteLink(inviteLink, b.bot.Token)
+}
+
+// Request makes an API request to Telegram and returns the response
+func (b *Bot) Request(c tgbotapi.Chattable) (tgbotapi.APIResponse, error) {
+	resp, err := b.bot.Request(c)
+	if err != nil {
+		return tgbotapi.APIResponse{}, err
+	}
+	return *resp, nil
 }
 
 func (b *Bot) Start() {
@@ -33,10 +59,10 @@ func (b *Bot) Start() {
 	})
 
 	if err != nil {
-		fmt.Printf("SetSchedules error: %v", err)
+		log.Printf("SetSchedules error: %v", err)
 	}
 
-	privateChatID := parseID(os.Getenv("PRIVATE_GROUP_ID"))
+	privateChatID := parseID(b.cfg.PrivateGroupID)
 
 	b.handleUpdates(b.initUpdatesChanel(), privateChatID)
 }
@@ -50,6 +76,12 @@ func (b *Bot) initUpdatesChanel() tgbotapi.UpdatesChannel {
 
 func (b *Bot) handleUpdates(updates tgbotapi.UpdatesChannel, privateChatID int64) {
 	for update := range updates {
+		// Handle chat_member updates (group join tracking)
+		if update.ChatMember != nil {
+			b.handleChatMember(update.ChatMember, privateChatID)
+			continue
+		}
+
 		chatID := update.FromChat().ID
 		if chatID == privateChatID {
 			if update.Message != nil && len(update.Message.NewChatMembers) > 0 {
@@ -80,22 +112,45 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery) {
 	// case "decline":
 	// declaine(b, callback)
 	default:
-		callback := tgbotapi.NewCallback(callback.ID, "")
-		b.bot.Send(callback)
+		callbackResponse := tgbotapi.NewCallback(callback.ID, "")
+		b.bot.Send(callbackResponse)
 		return
 
 	}
 }
 
 func accept(b *Bot, callBack *tgbotapi.CallbackQuery) {
-	services.ChangeIsMessaging(fmt.Sprint(callBack.From.ID), true)
+	chatID := fmt.Sprint(callBack.From.ID)
+
+	// Set messaging status to true
+	services.ChangeIsMessaging(chatID, true)
+
+	// Generate payment link via Prodamus
+	prodamusClient := services.NewProdamusClient(b.cfg)
+	paymentLink, err := prodamusClient.GeneratePaymentLink(b.cfg.ProdamusProductName, b.cfg.ProdamusProductPrice, b.cfg.ProdamusProductPaidContent)
+	if err != nil {
+		log.Printf("[PAYMENT_ERROR] Failed to generate payment link for user %s: %v", chatID, err)
+		log.Printf("[PAYMENT_ERROR] Prodamus API URL: %s", b.cfg.ProdamusAPIURL)
+		log.Printf("[PAYMENT_ERROR] User %s will continue without payment link. Keyboard buttons with {payment_link} placeholder will be filtered out.", chatID)
+		// Still continue even if payment link generation fails
+		// Messages with payment buttons will be filtered to avoid invalid URL errors
+	} else {
+		log.Printf("[PAYMENT_SUCCESS] Generated payment link for user %s: %s", chatID, paymentLink)
+		// Save payment link to user data
+		if err := services.SetPaymentLink(chatID, paymentLink); err != nil {
+			log.Printf("[PAYMENT_ERROR] Failed to save payment link for user %s: %v", chatID, err)
+		}
+	}
+
+	// Update button to "✅ Принято"
 	edit := tgbotapi.NewEditMessageReplyMarkup(
 		callBack.From.ID,
 		callBack.Message.MessageID,
 		dataButton("✅ Принято", "decline"))
 	b.bot.Send(edit)
 
-	services.SetSchedule(time.Now(), fmt.Sprint(callBack.From.ID), b.sendMessage)
+	// Start message scheduling
+	services.SetSchedule(time.Now(), chatID, b.sendMessage)
 }
 
 func declaine(b *Bot, callBack *tgbotapi.CallbackQuery) {
@@ -106,7 +161,6 @@ func declaine(b *Bot, callBack *tgbotapi.CallbackQuery) {
 		dataButton("🔲 Принимаю", "accept"))
 	b.bot.Send(edit)
 }
-
 
 func (b *Bot) sendMessage(chatID string) {
 	data, err := services.GetUser(chatID)
@@ -130,17 +184,26 @@ func (b *Bot) sendMessage(chatID string) {
 		return
 	}
 
-	url, buttonText, err := services.GetURLButton(last)
+	keyboardConfig, err := services.GetInlineKeyboard(last)
 	if err != nil {
 		return
 	}
+
+	values := map[string]string{
+		"payment_price": b.cfg.ProdamusProductPrice,
+		"payment_link":  data.PaymentLink,
+	}
+
+	text = services.ReplaceAllPlaceholders(text, values)
+	keyboard := processKeyboard(keyboardConfig, values)
+
 	var msg tgbotapi.Chattable
 	photoPath, err := services.GetPhoto(last)
 	if err != nil {
 		m := tgbotapi.NewMessage(parseID(chatID), text)
 		m.ParseMode = "HTML"
-		if !(url == "" || buttonText == "") {
-			keyboard := linkButton(url, buttonText)
+		// m.DisableWebPagePreview = true
+		if len(keyboard.InlineKeyboard) > 0 {
 			m.ReplyMarkup = keyboard
 		}
 		msg = m
@@ -149,8 +212,7 @@ func (b *Bot) sendMessage(chatID string) {
 		p := tgbotapi.NewPhoto(parseID(chatID), tgbotapi.FilePath(photoPath))
 		p.Caption = text
 		p.ParseMode = "HTML"
-		if !(url == "" || buttonText == "") {
-			keyboard := linkButton(url, buttonText)
+		if len(keyboard.InlineKeyboard) > 0 {
 			p.ReplyMarkup = keyboard
 		}
 		msg = p
@@ -171,12 +233,88 @@ func (b *Bot) sendMessage(chatID string) {
 	services.SetNextSchedule(chatID, last, b.sendMessage)
 }
 
-func linkButton(url string, buttonText string) tgbotapi.InlineKeyboardMarkup {
-	urlBtn := tgbotapi.NewInlineKeyboardButtonURL(buttonText, url)
-	row := tgbotapi.NewInlineKeyboardRow(urlBtn)
-	return tgbotapi.NewInlineKeyboardMarkup(row)
+func (b *Bot) SendInviteMessage(chatID string, inviteLink string) {
+	text, err := services.GetMessageText("group_invite")
+	if err != nil {
+		log.Printf("failed to load group_invite template: %v", err)
+		return
+	}
+
+	keyboardConfig, err := services.GetInlineKeyboard("group_invite")
+	if err != nil {
+		log.Printf("failed to get button config for group_invite: %v", err)
+		return
+	}
+
+	values := map[string]string{"invite_link": inviteLink}
+	text = services.ReplaceAllPlaceholders(text, values)
+	keyboard := processKeyboard(keyboardConfig, values)
+
+	m := tgbotapi.NewMessage(parseID(chatID), text)
+	m.ParseMode = "HTML"
+	m.DisableWebPagePreview = true
+
+	if len(keyboard.InlineKeyboard) > 0 {
+		m.ReplyMarkup = keyboard
+	}
+
+	if _, err := b.bot.Send(m); err != nil {
+		log.Printf("failed to send invite message to %s: %v", chatID, err)
+		return
+	}
+
+	log.Printf("invite message sent successfully to %s", chatID)
 }
 
+func processKeyboard(config *services.InlineKeyboardConfig, values map[string]string) tgbotapi.InlineKeyboardMarkup {
+	if config == nil {
+		return tgbotapi.InlineKeyboardMarkup{}
+	}
+
+	var validRows [][]tgbotapi.InlineKeyboardButton
+
+	for _, row := range config.Rows {
+		var validButtons []tgbotapi.InlineKeyboardButton
+
+		for _, btn := range row.Buttons {
+			if btn.Type != "url" {
+				if btn.Text != "" {
+					var newBtn tgbotapi.InlineKeyboardButton
+					switch btn.Type {
+					case "callback":
+						newBtn = tgbotapi.NewInlineKeyboardButtonData(btn.Text, btn.CallbackData)
+					}
+					validButtons = append(validButtons, newBtn)
+				}
+				continue
+			}
+
+			text := services.ReplaceAllPlaceholders(btn.Text, values)
+			url := services.ReplaceAllPlaceholders(btn.URL, values)
+
+			if strings.Contains(url, "{") || url == "" {
+				continue
+			}
+
+			if text != "" {
+				validButtons = append(validButtons, tgbotapi.NewInlineKeyboardButtonURL(text, url))
+			}
+		}
+
+		if len(validButtons) > 0 {
+			validRows = append(validRows, validButtons)
+		}
+	}
+
+	if len(validRows) == 0 {
+		return tgbotapi.InlineKeyboardMarkup{}
+	}
+
+	return tgbotapi.NewInlineKeyboardMarkup(validRows...)
+}
+
+// dataButton creates a callback button for inline keyboard interactions
+// Used in callback query handlers for accept/decline actions
 func dataButton(text string, calldata string) tgbotapi.InlineKeyboardMarkup {
 	btn := tgbotapi.NewInlineKeyboardButtonData(text, calldata)
 	row := tgbotapi.NewInlineKeyboardRow(btn)
@@ -184,19 +322,57 @@ func dataButton(text string, calldata string) tgbotapi.InlineKeyboardMarkup {
 }
 
 func parseID(s string) int64 {
-	id, _ := strconv.ParseInt(s, 10, 64)
+	id, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		log.Printf("Failed to parse ID %q: %v", s, err)
+		return 0
+	}
 	return id
 }
 
-func getMedia() (media Media) {
-	files := []string{
-		"assets/documents/ОФЕРТА.docx",
-		"assets/documents/Политика конфиденциальности.docx",
-		"assets/documents/Согласие ТГ БОТ.docx",
-	}
-	for _, f := range files {
-		media = append(media, tgbotapi.NewInputMediaDocument(tgbotapi.FilePath(f)))
+// handleChatMember processes chat_member updates to track when users join the private group
+func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateChatID int64) {
+	// Only process updates for the private group
+	if chatMember.Chat.ID != privateChatID {
+		return
 	}
 
-	return media
+	// Extract invite link used to join
+	if chatMember.InviteLink == nil {
+		return
+	}
+
+	inviteLink := chatMember.InviteLink.InviteLink
+	userID := fmt.Sprint(chatMember.NewChatMember.User.ID)
+
+	// Get user and check if invite link matches
+	user, err := services.GetUser(userID)
+	if err != nil {
+		log.Printf("user %s not found when processing group join: %v", userID, err)
+		return
+	}
+
+	// Check if user used their stored invite link
+	if user.InviteLink != inviteLink {
+		return
+	}
+
+	// User joined with their stored invite link
+	if !user.JoinedGroup {
+		user.JoinedGroup = true
+		joinedAt := time.Now()
+		user.JoinedAt = &joinedAt
+		if err := services.ChangeUser(userID, user); err != nil {
+			log.Printf("failed to update JoinedGroup for user %s: %v", userID, err)
+		} else {
+			log.Printf("user %s joined private group, JoinedGroup set to true", userID)
+		}
+	}
+
+	// Revoke the invite link (log only if fails, don't propagate error)
+	if err := b.RevokeInviteLink(inviteLink); err != nil {
+		log.Printf("failed to revoke invite link for user %s: %v", userID, err)
+	} else {
+		log.Printf("invite link revoked for user %s", userID)
+	}
 }

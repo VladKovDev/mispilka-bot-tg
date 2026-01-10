@@ -90,8 +90,7 @@ func SetNextSchedule(chatID string, messageName string, sendMessage func(string)
 	return nil
 }
 
-func setSendTime(now time.Time, timing []int) time.Time {
-	nextDate := now.Add(time.Duration(timing[0])*time.Hour +
-		time.Duration(timing[1])*time.Minute)
-	return nextDate
+func setSendTime(now time.Time, timing Timing) time.Time {
+	return now.Add(time.Duration(timing.Hours)*time.Hour +
+		time.Duration(timing.Minutes)*time.Minute)
 }

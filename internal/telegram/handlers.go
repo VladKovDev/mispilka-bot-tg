@@ -18,7 +18,9 @@ func (b *Bot) handleCommand(message *tgbotapi.Message) {
 	lowerCommand := strings.ToLower(message.Command())
 	switch lowerCommand {
 	case commandStart:
-		b.startCommand(message)
+		if err := b.startCommand(message); err != nil {
+			log.Printf("Failed to handle /start command: %v", err)
+		}
 	case commandRestart:
 		if err := services.AddUser(message); err != nil {
 			log.Printf("Failed to add user: %v", err)
@@ -26,21 +28,46 @@ func (b *Bot) handleCommand(message *tgbotapi.Message) {
 	}
 }
 
-func (b *Bot) startCommand(message *tgbotapi.Message)error{
-	if services.IsNewUser(fmt.Sprint(message.Chat.ID)) {
-		err := services.AddUser(message)
-		if err != nil {
-			return err
+func (b *Bot) startCommand(message *tgbotapi.Message) error {
+	chatID := fmt.Sprint(message.Chat.ID)
+
+	// Add user if new
+	isNew, err := services.IsNewUser(chatID)
+	if err != nil {
+		return fmt.Errorf("failed to check if user is new: %w", err)
+	}
+	if isNew {
+		if err := services.AddUser(message); err != nil {
+			return fmt.Errorf("failed to add new user: %w", err)
 		}
 	}
 
+	// Build and send start message
+	msg, err := b.buildStartMessage(chatID)
+	if err != nil {
+		return fmt.Errorf("failed to build start message: %w", err)
+	}
+
+	if _, err := b.bot.Send(msg); err != nil {
+		return fmt.Errorf("failed to send start message: %w", err)
+	}
+
+	return nil
+}
+
+// buildStartMessage creates the start command message with appropriate keyboard
+func (b *Bot) buildStartMessage(chatID string) (tgbotapi.MessageConfig, error) {
 	text, err := services.GetMessageText(commandStart)
 	if err != nil {
-		return fmt.Errorf("failed to get message text: %w", err)
+		return tgbotapi.MessageConfig{}, fmt.Errorf("failed to get message text: %w", err)
 	}
-	msg := tgbotapi.NewMessage(message.Chat.ID, text)
 
-	userData, err := services.GetUser(fmt.Sprint(message.Chat.ID))
+	msg := tgbotapi.NewMessage(parseID(chatID), text)
+	msg.ParseMode = "HTML"
+	msg.DisableWebPagePreview = true
+
+	// Set keyboard based on user's messaging status
+	userData, err := services.GetUser(chatID)
 	if err == nil {
 		if userData.IsMessaging {
 			msg.ReplyMarkup = dataButton("✅ Принято", "decline")
@@ -48,11 +75,9 @@ func (b *Bot) startCommand(message *tgbotapi.Message)error{
 			msg.ReplyMarkup = dataButton("🔲 Принимаю", "accept")
 		}
 	} else {
+		// Default keyboard for new users
 		msg.ReplyMarkup = dataButton("🔲 Принимаю", "accept")
 	}
-	msg.ParseMode = "HTML"
-	if _, err := b.bot.Send(msg); err != nil {
-		return err
-	}
-	return nil
+
+	return msg, nil
 }

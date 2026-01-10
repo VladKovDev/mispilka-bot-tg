@@ -6,3 +6,6 @@ build:
 
 run: build
 	./.bin/bot
+
+run-dev:
+	go run cmd/app/main.go

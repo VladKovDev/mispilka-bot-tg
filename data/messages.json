@@ -1,4 +1,124 @@
 {
-  "messages_list": [],
-  "messages": {}
+  "messages_list": ["1", "2", "3", "4", "5"],
+  "messages": {
+    "1": {
+      "timing": {
+        "hours": 0,
+        "minutes": 0
+      },
+      "template_file": "1.md",
+      "inline_keyboard": {
+        "rows": [
+          {
+            "buttons": [
+              {
+                "type": "url",
+                "text": "ОПЛАТИТЬ КУРС 💳",
+                "url": "{payment_link}"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "2": {
+      "timing": {
+        "hours": 0,
+        "minutes": 1
+      },
+      "template_file": "2.md",
+      "inline_keyboard": {
+        "rows": [
+          {
+            "buttons": [
+              {
+                "type": "url",
+                "text": "Забрать курс",
+                "url": "{payment_link}"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "3": {
+      "timing": {
+        "hours": 0,
+        "minutes": 1
+      },
+      "template_file": "3.md",
+      "inline_keyboard": {
+        "rows": [
+          {
+            "buttons": [
+              {
+                "type": "url",
+                "text": "Хочу на курс",
+                "url": "{payment_link}"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "4": {
+      "timing": {
+        "hours": 0,
+        "minutes": 1
+      },
+      "template_file": "4.md",
+      "inline_keyboard": {
+        "rows": [
+          {
+            "buttons": [
+              {
+                "type": "url",
+                "text": "Забрать курс",
+                "url": "{payment_link}"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "5": {
+      "timing": {
+        "hours": 0,
+        "minutes": 1
+      },
+      "template_file": "5.md",
+      "inline_keyboard": {
+        "rows": [
+          {
+            "buttons": [
+              {
+                "type": "url",
+                "text": "Оплатить курс за {payment_price}Р",
+                "url": "{payment_link}"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "group_invite": {
+      "template_file": "group_invite.md",
+      "inline_keyboard": {
+        "rows": [
+          {
+            "buttons": [
+              {
+                "type": "url",
+                "text": "Войти в закрытую группу 🚪",
+                "url": "{invite_link}"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "start": {
+      "template_file": "start.md"
+    }
+  }
 }

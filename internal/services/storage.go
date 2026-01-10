@@ -59,8 +59,7 @@ func WriteJSONRetry[T any](path string, data T, attempts int) error {
 	return fmt.Errorf("WriteJSON failed after %d attempts: %w", attempts, err)
 }
 
-
-func CheckStorage(path string)error{
+func CheckStorage(path string) error {
 	_, err := os.Stat(path)
 	if err != nil || os.IsNotExist(err) {
 		_, err = os.Create(path)
@@ -68,7 +67,7 @@ func CheckStorage(path string)error{
 			log.Printf("create file: %v", path)
 		}
 		v := struct{}{}
-		if err := WriteJSON(path, v); err != nil{
+		if err := WriteJSON(path, v); err != nil {
 			return err
 		}
 	}
