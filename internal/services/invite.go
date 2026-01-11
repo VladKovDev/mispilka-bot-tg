@@ -1,101 +1,69 @@
 package services
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log"
-	"net/http"
 	"strconv"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
+
+// parseChatID is a helper function to parse a chat ID from string to int64
+func parseChatID(id string) (int64, error) {
+	return strconv.ParseInt(id, 10, 64)
+}
 
 // GenerateInviteLink creates a new invite link for a chat/group with member limit set to 1
 // Returns the invite link URL or an error if generation fails
-func GenerateInviteLink(userID, groupID string, botToken string) (string, error) {
-	groupIDInt, err := strconv.ParseInt(groupID, 10, 64)
+func GenerateInviteLink(userID, groupID string, bot *tgbotapi.BotAPI) (string, error) {
+	groupIDInt, err := parseChatID(groupID)
 	if err != nil {
 		return "", fmt.Errorf("invalid groupID format: %w", err)
 	}
 
-	// Create request body for createChatInviteLink
-	requestBody := map[string]interface{}{
-		"chat_id":      groupIDInt,
-		"member_limit": 1,
+	// Create chat invite link using the Telegram Bot API
+	linkConfig := tgbotapi.CreateChatInviteLinkConfig{
+		ChatConfig:  tgbotapi.ChatConfig{ChatID: groupIDInt},
+		MemberLimit: 1,
 	}
 
-	jsonBody, err := json.Marshal(requestBody)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	// Make HTTP request to Telegram Bot API
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/createChatInviteLink", botToken)
-	log.Printf("[DEBUG] Creating invite link: url=%q, body=%s", url, string(jsonBody))
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonBody))
+	result, err := bot.Request(linkConfig)
 	if err != nil {
 		return "", fmt.Errorf("failed to create invite link: %w", err)
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
-	}
-
-	log.Printf("[DEBUG] Telegram API response: %s", string(body))
-
-	var result struct {
-		Ok     bool `json:"ok"`
-		Result struct {
-			InviteLink string `json:"invite_link"`
-		} `json:"result"`
-	}
-
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("failed to unmarshal response: %w", err)
-	}
 
 	if !result.Ok {
-		return "", fmt.Errorf("API error: ok=false")
+		return "", fmt.Errorf("API error: %s", result.Description)
 	}
 
-	log.Printf("[DEBUG] Invite link created successfully: %q", result.Result.InviteLink)
-	return result.Result.InviteLink, nil
+	// Unmarshal the result to get the invite link
+	if len(result.Result) == 0 {
+		return "", fmt.Errorf("empty result from Telegram API")
+	}
+	var inviteLink tgbotapi.ChatInviteLink
+	if err := json.Unmarshal(result.Result, &inviteLink); err != nil {
+		return "", fmt.Errorf("failed to unmarshal invite link: %w", err)
+	}
+
+	return inviteLink.InviteLink, nil
 }
 
 // RevokeInviteLink revokes an existing invite link for a chat
-func RevokeInviteLink(inviteLink string, botToken string) error {
-	// Create request body for revokeChatInviteLink
-	requestBody := map[string]interface{}{
-		"invite_link": inviteLink,
-	}
-
-	jsonBody, err := json.Marshal(requestBody)
+func RevokeInviteLink(groupID, inviteLink string, bot *tgbotapi.BotAPI) error {
+	groupIDInt, err := parseChatID(groupID)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
+		return fmt.Errorf("invalid groupID format: %w", err)
 	}
 
-	// Make HTTP request to Telegram Bot API
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/revokeChatInviteLink", botToken)
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonBody))
+	// Revoke chat invite link using the Telegram Bot API
+	revokeConfig := tgbotapi.RevokeChatInviteLinkConfig{
+		ChatConfig:  tgbotapi.ChatConfig{ChatID: groupIDInt},
+		InviteLink:  inviteLink,
+	}
+
+	result, err := bot.Request(revokeConfig)
 	if err != nil {
 		return fmt.Errorf("failed to revoke invite link: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response: %w", err)
-	}
-
-	var result struct {
-		Ok          bool   `json:"ok"`
-		Description string `json:"description"`
-	}
-
-	if err := json.Unmarshal(body, &result); err != nil {
-		return fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
 	if !result.Ok {

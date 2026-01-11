@@ -24,19 +24,14 @@ func NewBot(bot *tgbotapi.BotAPI, cfg *config.Config) *Bot {
 	return &Bot{bot: bot, cfg: cfg}
 }
 
-// GetToken returns the bot token for use in direct API calls
-func (b *Bot) GetToken() string {
-	return b.bot.Token
-}
-
 // GenerateInviteLink creates a new invite link for the specified group
 func (b *Bot) GenerateInviteLink(userID, groupID string) (string, error) {
-	return services.GenerateInviteLink(userID, groupID, b.bot.Token)
+	return services.GenerateInviteLink(userID, groupID, b.bot)
 }
 
 // RevokeInviteLink revokes an existing invite link
-func (b *Bot) RevokeInviteLink(inviteLink string) error {
-	return services.RevokeInviteLink(inviteLink, b.bot.Token)
+func (b *Bot) RevokeInviteLink(groupID, inviteLink string) error {
+	return services.RevokeInviteLink(groupID, inviteLink, b.bot)
 }
 
 // Request makes an API request to Telegram and returns the response
@@ -262,14 +257,11 @@ func (b *Bot) sendMessage(chatID string) {
 }
 
 func (b *Bot) SendInviteMessage(userID string, inviteLink string) {
-	log.Printf("[DEBUG] SendInviteMessage called with userID=%s, inviteLink=%s", userID, inviteLink)
-
 	text, err := services.GetMessageText("group_invite")
 	if err != nil {
 		log.Printf("failed to load group_invite template: %v", err)
 		return
 	}
-	log.Printf("[DEBUG] Raw text loaded: %q", text)
 
 	keyboardConfig, err := services.GetInlineKeyboard("group_invite")
 	if err != nil {
@@ -278,12 +270,9 @@ func (b *Bot) SendInviteMessage(userID string, inviteLink string) {
 	}
 
 	values := map[string]string{"invite_link": inviteLink}
-	log.Printf("[DEBUG] Replacing placeholders with values: %+v", values)
 	text = services.ReplaceAllPlaceholders(text, values)
-	log.Printf("[DEBUG] Text after replacement: %q", text)
 
 	keyboard := processKeyboard(keyboardConfig, values)
-	log.Printf("[DEBUG] Keyboard rows count: %d", len(keyboard.InlineKeyboard))
 
 	m := tgbotapi.NewMessage(parseID(userID), text)
 	m.ParseMode = "HTML"
@@ -291,7 +280,6 @@ func (b *Bot) SendInviteMessage(userID string, inviteLink string) {
 
 	if len(keyboard.InlineKeyboard) > 0 {
 		m.ReplyMarkup = keyboard
-		log.Printf("[DEBUG] Keyboard attached to message")
 	}
 
 	if _, err := b.bot.Send(m); err != nil {
@@ -368,7 +356,7 @@ func dataButton(text string, calldata string) tgbotapi.InlineKeyboardMarkup {
 func parseID(s string) int64 {
 	id, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		log.Printf("Failed to parse ID %q: %v", s, err)
+		log.Printf("Failed to parse ID: %v", err)
 		return 0
 	}
 	return id
@@ -398,6 +386,12 @@ func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateCh
 
 	// Check if user used their stored invite link
 	if user.InviteLink != inviteLink {
+		// User joined with a different link - revoke the stored invite link for security
+		if err := b.RevokeInviteLink(fmt.Sprint(privateChatID), user.InviteLink); err != nil {
+			log.Printf("failed to revoke stored invite link for user %s who joined with different link: %v", userID, err)
+		} else {
+			log.Printf("revoked stored invite link for user %s who joined with different link", userID)
+		}
 		return
 	}
 
@@ -414,7 +408,7 @@ func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateCh
 	}
 
 	// Revoke the invite link (log only if fails, don't propagate error)
-	if err := b.RevokeInviteLink(inviteLink); err != nil {
+	if err := b.RevokeInviteLink(fmt.Sprint(privateChatID), inviteLink); err != nil {
 		log.Printf("failed to revoke invite link for user %s: %v", userID, err)
 	} else {
 		log.Printf("invite link revoked for user %s", userID)
