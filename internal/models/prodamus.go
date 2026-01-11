@@ -31,6 +31,7 @@ type WebhookPayload struct {
 	PaymentInit              string    `form:"payment_init" json:"payment_init"` // Api (по токену), Auto (автоплатеж по подписке), Manual (клиентом)
 	Commission               string    `form:"commission" json:"commission"`
 	CommissionSum            string    `form:"commission_sum" json:"commission_sum"`
+	PaymentsLimit            string    `form:"payments_limit" json:"payments_limit"` // max number of payments (for subscription payments)
 	Attempt                  string    `form:"attempt" json:"attempt"`
 	Date                     string    `form:"date" json:"date"`
 	PaymentStatus            string    `form:"payment_status" json:"payment_status"` // success, order_canceled, order_denied
