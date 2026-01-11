@@ -11,3 +11,7 @@ data/*
 !data/README.md
 !data/example/
 !data/example/**
+
+# Assets directory: ignore content but keep README.md
+assets/images/*
+!assets/README.md
