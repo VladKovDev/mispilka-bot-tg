@@ -1,6 +1,7 @@
 package prodamus
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -50,6 +51,22 @@ func (h *Handler) SetInviteMessageCallback(callback func(userID, inviteLink stri
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Println("=== Prodamus Webhook Received ===")
 
+	// Log headers and raw body BEFORE any parsing
+	h.logHeadersRaw(r)
+
+	// Read raw body for logging before parsing
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("Failed to read raw body: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	r.Body.Close() // Body is now consumed, need to recreate for parsing
+	log.Printf("Raw Body (%d bytes):\n%s", len(bodyBytes), string(bodyBytes))
+
+	// Recreate the body reader for parsing
+	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
 	// Validate HTTP method
 	if r.Method != http.MethodPost {
 		log.Printf("Invalid method: %s", r.Method)
@@ -58,7 +75,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Read and parse request body
-	payload, payloadMap, bodyBytes, err := h.readAndParseBody(r)
+	payload, payloadMap, _, err := h.readAndParseBody(r)
 	if err != nil {
 		log.Printf("Failed to read and parse body: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
@@ -276,6 +293,10 @@ func (h *Handler) generateInviteLink(userID string) (string, error) {
 }
 
 func (h *Handler) logRequest(r *http.Request, bodyBytes []byte) {
+	// Log Content-Type explicitly at the top
+	contentType := r.Header.Get("Content-Type")
+	log.Printf("Content-Type: %s", contentType)
+
 	// Log basic request info
 	h.logRequestBasic(r)
 
@@ -286,7 +307,7 @@ func (h *Handler) logRequest(r *http.Request, bodyBytes []byte) {
 	h.logQueryParams(r.URL.Query())
 
 	// Log body
-	h.logBody(r.Header.Get("Content-Type"), bodyBytes)
+	h.logBody(contentType, bodyBytes)
 
 	log.Println("=== End of Webhook Request ===")
 }
@@ -296,6 +317,21 @@ func (h *Handler) logRequestBasic(r *http.Request) {
 	log.Printf("Method: %s", r.Method)
 	log.Printf("URL: %s", r.URL.String())
 	log.Printf("Host: %s", r.Host)
+}
+
+// logHeadersRaw logs all request headers (before parsing)
+func (h *Handler) logHeadersRaw(r *http.Request) {
+	log.Println("--- Raw Headers ---")
+	log.Printf("Content-Type: %s", r.Header.Get("Content-Type"))
+	for key, values := range r.Header {
+		for _, value := range values {
+			log.Printf("  %s: %s", key, value)
+		}
+	}
+
+	if sign := r.Header.Get("Sign"); sign != "" {
+		log.Printf("[Sign Header]: %s", sign)
+	}
 }
 
 // logHeaders logs all request headers
