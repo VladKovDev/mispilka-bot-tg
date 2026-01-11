@@ -204,8 +204,10 @@ func (h *Handler) verifySignature(r *http.Request, payload map[string]interface{
 		return false
 	}
 
+	signaturePayload := services.BuildSignaturePayload(payload)
+
 	// Verify signature using Prodamus algorithm
-	isValid, err := hmac.VerifySignature(payload, h.secretKey, receivedSignature)
+	isValid, err := hmac.VerifySignature(signaturePayload, h.secretKey, receivedSignature)
 	if err != nil {
 		log.Printf("Signature verification error: %v", err)
 		return false
