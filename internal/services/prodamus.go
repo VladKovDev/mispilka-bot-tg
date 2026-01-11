@@ -13,7 +13,7 @@ import (
 )
 
 type SignatureInput struct {
-	OrderID  string
+	UserID   string
 	Products []SignatureProduct
 }
 
@@ -25,7 +25,7 @@ type SignatureProduct struct {
 
 func BuildSignaturePayload(input SignatureInput) map[string]string {
 	payload := map[string]string{
-		"order_id": input.OrderID,
+		"_param_user_id": input.UserID,
 	}
 
 	if len(input.Products) > 0 {
@@ -58,7 +58,7 @@ func NewProdamusClient(cfg *config.Config) *ProdamusClient {
 // Documentation: https://help.prodamus.ru/payform/integracii/rest-api/
 func (p *ProdamusClient) GeneratePaymentLink(userID string, productName string, price string, paidContent string) (string, error) {
 	signInput := SignatureInput{
-		OrderID: userID,
+		UserID: userID,
 		Products: []SignatureProduct{
 			{
 				Name:     productName,
@@ -84,7 +84,7 @@ func (p *ProdamusClient) GeneratePaymentLink(userID string, productName string, 
 	params.Set("do", "link")
 	params.Set("paid_content", paidContent)
 	params.Set("payments_limit", "1")
-	params.Set("order_id", userID)
+	params.Set("_param_user_id", userID)
 	params.Set("products[0][name]", productName)
 	params.Set("products[0][price]", price)
 	params.Set("products[0][quantity]", "1")

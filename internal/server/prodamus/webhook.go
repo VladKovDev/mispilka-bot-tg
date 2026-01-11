@@ -92,7 +92,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Process only successful payments
 	if h.isSuccessStatus(payload.PaymentStatus) {
-		userID := payload.CustomerExtra
+		userID := payload.ParamUserID
 		if userID == "" {
 			log.Printf("Error: No customer_extra (user_id) found in payload")
 			w.WriteHeader(http.StatusBadRequest)
@@ -210,7 +210,7 @@ func (h *Handler) verifySignature(r *http.Request, payload models.WebhookPayload
 	}
 
 	signInput := services.SignatureInput{
-		OrderID:  payload.OrderID,
+		UserID:   payload.ParamUserID,
 		Products: mapProducts(payload.Products),
 	}
 

@@ -20,6 +20,7 @@ const (
 type WebhookPayload struct {
 	OrderID                  string    `form:"order_id" json:"order_id"` // order ID
 	OrderNum                 string    `form:"order_num" json:"order_num"`
+	ParamUserID              string    `form:"_param_user_id" json:"_param_user_id"`
 	Domain                   string    `form:"domain" json:"domain"`
 	Sum                      string    `form:"sum" json:"sum"` // amount
 	Currency                 string    `form:"currency" json:"currency"`
