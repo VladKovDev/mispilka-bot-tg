@@ -40,17 +40,15 @@ func CreateSignature(data interface{}, secretKey string) (string, error) {
 		return "", fmt.Errorf("failed to marshal JSON: %w", err)
 	}
 
-	jsonStr := string(jsonBytes)
-
-	// Note: Step 4 (escape forward slashes) is NOT included because:
-	// 1. The PHP library code in Prodamus docs doesn't do it
-	// 2. json_encode with JSON_UNESCAPED_UNICODE doesn't escape '/'
-	// 3. Go's json.Marshal doesn't escape '/' by default
-	// This appears to be a documentation inconsistency
+	// Step 4: Escape forward slashes in JSON string to match PHP's json_encode behavior.
+	// Note: this may cause double-escaping in edge cases where values already contain escaped slashes.
+	jsonStr := strings.ReplaceAll(string(jsonBytes), "/", "\\/")
 
 	// Step 5: Sign with HMAC-SHA256
 	mac := hmac.New(sha256.New, []byte(secretKey))
-	mac.Write([]byte(jsonStr))
+	if _, err := mac.Write([]byte(jsonStr)); err != nil {
+		return "", fmt.Errorf("failed to write to HMAC: %w", err)
+	}
 	signature := hex.EncodeToString(mac.Sum(nil))
 
 	return signature, nil
@@ -65,7 +63,7 @@ func VerifySignature(data interface{}, secretKey string, receivedSignature strin
 	// Calculate expected signature
 	expectedSignature, err := CreateSignature(data, secretKey)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to compute expected signature: %w", err)
 	}
 
 	// Compare signatures case-insensitively (as per Prodamus docs)
@@ -98,12 +96,12 @@ func convertToMap(data interface{}) (map[string]interface{}, error) {
 	// Try to marshal and unmarshal as JSON
 	jsonBytes, err := json.Marshal(data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal data to JSON: %w", err)
 	}
 
 	var result map[string]interface{}
 	if err := json.Unmarshal(jsonBytes, &result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal JSON to map: %w", err)
 	}
 
 	return result, nil
