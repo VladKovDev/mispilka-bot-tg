@@ -262,11 +262,14 @@ func (b *Bot) sendMessage(chatID string) {
 }
 
 func (b *Bot) SendInviteMessage(userID string, inviteLink string) {
+	log.Printf("[DEBUG] SendInviteMessage called with userID=%s, inviteLink=%s", userID, inviteLink)
+
 	text, err := services.GetMessageText("group_invite")
 	if err != nil {
 		log.Printf("failed to load group_invite template: %v", err)
 		return
 	}
+	log.Printf("[DEBUG] Raw text loaded: %q", text)
 
 	keyboardConfig, err := services.GetInlineKeyboard("group_invite")
 	if err != nil {
@@ -275,8 +278,12 @@ func (b *Bot) SendInviteMessage(userID string, inviteLink string) {
 	}
 
 	values := map[string]string{"invite_link": inviteLink}
+	log.Printf("[DEBUG] Replacing placeholders with values: %+v", values)
 	text = services.ReplaceAllPlaceholders(text, values)
+	log.Printf("[DEBUG] Text after replacement: %q", text)
+
 	keyboard := processKeyboard(keyboardConfig, values)
+	log.Printf("[DEBUG] Keyboard rows count: %d", len(keyboard.InlineKeyboard))
 
 	m := tgbotapi.NewMessage(parseID(userID), text)
 	m.ParseMode = "HTML"
@@ -284,6 +291,7 @@ func (b *Bot) SendInviteMessage(userID string, inviteLink string) {
 
 	if len(keyboard.InlineKeyboard) > 0 {
 		m.ReplyMarkup = keyboard
+		log.Printf("[DEBUG] Keyboard attached to message")
 	}
 
 	if _, err := b.bot.Send(m); err != nil {
