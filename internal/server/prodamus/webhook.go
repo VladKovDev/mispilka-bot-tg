@@ -233,6 +233,8 @@ func (h *Handler) processPayment(userID string, payload *models.WebhookPayload) 
 		return fmt.Errorf("user not found: %w", err)
 	}
 
+	log.Printf("[DEBUG] processPayment: userData before invite link generation, InviteLink=%q", userData.InviteLink)
+
 	now := time.Now()
 	userData.PaymentDate = &now
 	userData.IsMessaging = false
@@ -243,6 +245,8 @@ func (h *Handler) processPayment(userID string, payload *models.WebhookPayload) 
 		log.Printf("Warning: %v", err)
 	}
 
+	log.Printf("[DEBUG] processPayment: userData after invite link generation, InviteLink=%q", userData.InviteLink)
+
 	if err := services.ChangeUser(userID, userData); err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
 	}
@@ -252,12 +256,18 @@ func (h *Handler) processPayment(userID string, payload *models.WebhookPayload) 
 
 // handleInviteLinkGeneration generates invite link and queues message sending
 func (h *Handler) handleInviteLinkGeneration(userID string, userData *services.User) error {
+	log.Printf("[DEBUG] Starting invite link generation for userID=%s", userID)
+
 	inviteLink, err := h.generateInviteLink(userID)
 	if err != nil {
+		log.Printf("[DEBUG] Failed to generate invite link for userID=%s: %v", userID, err)
 		return fmt.Errorf("failed to generate invite link: %w", err)
 	}
 
+	log.Printf("[DEBUG] Invite link generated for userID=%s: %q", userID, inviteLink)
+
 	userData.InviteLink = inviteLink
+	log.Printf("[DEBUG] userData.InviteLink set to: %q", userData.InviteLink)
 
 	if h.sendInviteMessage != nil {
 		go func() {
@@ -276,6 +286,8 @@ func (h *Handler) handleInviteLinkGeneration(userID string, userData *services.U
 
 // generateInviteLink creates an invite link for the user
 func (h *Handler) generateInviteLink(userID string) (string, error) {
+	log.Printf("[DEBUG] generateInviteLink: userID=%s, privateGroupID=%q", userID, h.privateGroupID)
+
 	if h.privateGroupID == "" {
 		return "", fmt.Errorf("PRIVATE_GROUP_ID not set")
 	}
@@ -288,5 +300,6 @@ func (h *Handler) generateInviteLink(userID string) (string, error) {
 		return "", fmt.Errorf("failed to generate invite link: %w", err)
 	}
 
+	log.Printf("[DEBUG] generateInviteLink: result=%q", inviteLink)
 	return inviteLink, nil
 }

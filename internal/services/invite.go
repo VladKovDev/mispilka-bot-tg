@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 )
@@ -30,6 +31,7 @@ func GenerateInviteLink(userID, groupID string, botToken string) (string, error)
 
 	// Make HTTP request to Telegram Bot API
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/createChatInviteLink", botToken)
+	log.Printf("[DEBUG] Creating invite link: url=%q, body=%s", url, string(jsonBody))
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return "", fmt.Errorf("failed to create invite link: %w", err)
@@ -40,6 +42,8 @@ func GenerateInviteLink(userID, groupID string, botToken string) (string, error)
 	if err != nil {
 		return "", fmt.Errorf("failed to read response: %w", err)
 	}
+
+	log.Printf("[DEBUG] Telegram API response: %s", string(body))
 
 	var result struct {
 		Ok          bool   `json:"ok"`
@@ -55,6 +59,7 @@ func GenerateInviteLink(userID, groupID string, botToken string) (string, error)
 		return "", fmt.Errorf("API error: %s", result.Description)
 	}
 
+	log.Printf("[DEBUG] Invite link created successfully: %q", result.InviteLink)
 	return result.InviteLink, nil
 }
 
