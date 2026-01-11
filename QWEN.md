@@ -208,9 +208,10 @@ The `PRIVATE_GROUP_ID` environment variable specifies the private group for paid
 **Webhook Endpoint:** `http://{WEBHOOK_HOST}:{WEBHOOK_PORT}{WEBHOOK_PATH}` (default: http://0.0.0.0:8080/webhook/prodamus)
 
 **Webhook Processing:**
-- Receives POST requests with payment data (JSON format)
-- Verifies HMAC-SHA256 signature using `PRODAMUS_SECRET_KEY`
-- Processes successful payments (`status: success` or `paid`)
+- Receives POST requests with payment data as URL-encoded form data (not JSON)
+- Verifies HMAC-SHA256 signature from `Sign` HTTP header using `PRODAMUS_SECRET_KEY`
+- Signature verification uses only: `order_id` and first product's `name`, `price`, `quantity`
+- Processes successful payments (`status: success`)
 - Generates unique Telegram group invite links via `createChatInviteLink`
 - Stores invite link in `users.json`
 - Sends `group_invite` message with `{{invite_link}}` placeholder
@@ -218,7 +219,6 @@ The `PRIVATE_GROUP_ID` environment variable specifies the private group for paid
 - Logs all request data: headers, query params, body
 - Always returns 200 OK to prevent retry loops
 
-**See:** `internal/server/README.md` for detailed webhook configuration and usage
 
 ### User Data Model
 

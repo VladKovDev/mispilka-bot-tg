@@ -12,83 +12,33 @@ import (
 	"mispilkabot/internal/services/hmac"
 )
 
-// SignatureKeys defines the fields that are included in Prodamus signature calculation.
-// These fields must match exactly between payment link generation and webhook verification.
-var SignatureKeys = []string{
-	"do",
-	"order_id",
-	"paid_content",
-	"payments_limit",
-	"products",
+type SignatureInput struct {
+	OrderID  string
+	Products []SignatureProduct
 }
 
-// ProductSignatureKeys defines the fields inside each product that are included in signature calculation.
-var ProductSignatureKeys = []string{
-	"name",
-	"price",
-	"quantity",
+type SignatureProduct struct {
+	Name     string
+	Price    string
+	Quantity string
 }
 
-// filterProductMap extracts only the product signature keys from a product map.
-// Returns nil if the input is not a valid product map.
-func filterProductMap(product interface{}) map[string]interface{} {
-	productMap, ok := product.(map[string]interface{})
-	if !ok {
-		return nil
+func BuildSignaturePayload(input SignatureInput) map[string]string {
+	payload := map[string]string{
+		"order_id": input.OrderID,
 	}
 
-	filtered := make(map[string]interface{}, len(ProductSignatureKeys))
-	for _, key := range ProductSignatureKeys {
-		if value, exists := productMap[key]; exists {
-			filtered[key] = value
-		}
+	if len(input.Products) > 0 {
+		product := input.Products[0]
+
+		payload["product_name"] = product.Name
+		payload["product_price"] = product.Price
+		payload["product_quantity"] = product.Quantity
 	}
-	return filtered
+
+	return payload
 }
 
-// filterProductsArray filters an array of products to only include product signature keys.
-// Returns nil if the input is not a valid products array.
-func filterProductsArray(products interface{}) []interface{} {
-	productsSlice, ok := products.([]interface{})
-	if !ok {
-		return nil
-	}
-
-	filtered := make([]interface{}, 0, len(productsSlice))
-	for _, product := range productsSlice {
-		if filteredProduct := filterProductMap(product); filteredProduct != nil {
-			filtered = append(filtered, filteredProduct)
-		}
-	}
-	return filtered
-}
-
-// BuildSignaturePayload filters a full payload to include only the keys required for
-// signature calculation. For the "products" array, each product is filtered to only
-// include keys from ProductSignatureKeys.
-func BuildSignaturePayload(fullPayload map[string]interface{}) map[string]interface{} {
-	result := make(map[string]interface{}, len(SignatureKeys))
-
-	for _, key := range SignatureKeys {
-		value, exists := fullPayload[key]
-		if !exists {
-			continue
-		}
-
-		// Special handling for products array - filter each product
-		if key == "products" {
-			if filteredProducts := filterProductsArray(value); filteredProducts != nil {
-				result[key] = filteredProducts
-			}
-		} else {
-			result[key] = value
-		}
-	}
-
-	return result
-}
-
-// ProdamusClient handles payment link generation via Prodamus API
 type ProdamusClient struct {
 	apiURL     string
 	secretKey  string
@@ -107,20 +57,19 @@ func NewProdamusClient(cfg *config.Config) *ProdamusClient {
 // GeneratePaymentLink creates a payment link via Prodamus API with signature
 // Documentation: https://help.prodamus.ru/payform/integracii/rest-api/
 func (p *ProdamusClient) GeneratePaymentLink(userID string, productName string, price string, paidContent string) (string, error) {
-	// Build data map for signature creation according to Prodamus algorithm
-	signData := map[string]interface{}{
-		"do":             "link",
-		"paid_content":   paidContent,
-		"order_id":       userID,
-		"payments_limit": "1",
-		"products": []map[string]interface{}{
+	signInput := SignatureInput{
+		OrderID: userID,
+		Products: []SignatureProduct{
 			{
-				"name":     productName,
-				"price":    price,
-				"quantity": "1",
+				Name:     productName,
+				Price:    price,
+				Quantity: "1",
 			},
 		},
 	}
+
+	// Build signature payload
+	signData := BuildSignaturePayload(signInput)
 
 	// Create signature using Prodamus algorithm
 	signature, err := hmac.CreateSignature(signData, p.secretKey)

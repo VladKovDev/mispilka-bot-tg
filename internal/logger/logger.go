@@ -11,7 +11,8 @@ import (
 func LogRequest(r *http.Request, bodyBytes []byte) {
 	contentType := r.Header.Get("Content-Type")
 
-	log.Println("\n=== Start Request ===")
+	log.Println("")
+	log.Println("=== Start Request ===")
 
 	LogRequestBasic(r)
 	LogHeaders(r.Header)
