@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/url"
 	"reflect"
 	"sort"
@@ -31,11 +32,15 @@ func VerifySignatureFromFormValues(values url.Values, secretKey, receivedSignatu
 		}
 	}
 
+	log.Printf("values for signature: %+v", values)
+	log.Printf("data for signature: %+v", data)
+
 	// Calculate expected signature using all fields
 	expectedSignature, err := CreateSignature(data, secretKey)
 	if err != nil {
 		return false, err
 	}
+	log.Printf("expectedSignature: %s", expectedSignature)
 
 	// Compare signatures case-insensitively (as per Prodamus docs)
 	return strings.EqualFold(expectedSignature, receivedSignature), nil
