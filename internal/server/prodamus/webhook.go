@@ -142,11 +142,10 @@ func (h *Handler) readAndParseBody(r *http.Request) (*models.WebhookPayload, map
 
 	var payload models.WebhookPayload
 
-	// Parse multipart/form-data form (max 10MB)
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to parse multipart form: %w", err)
+	// Parse application/x-www-form-urlencoded form
+	if err := r.ParseForm(); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to parse form: %w", err)
 	}
-	defer r.MultipartForm.RemoveAll()
 
 	// Get values from form
 	values := r.Form
