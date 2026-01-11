@@ -1,11 +1,11 @@
 package prodamus
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"mispilkabot/internal/logger"
 	"mispilkabot/internal/models"
 	"mispilkabot/internal/services"
 	"mispilkabot/internal/services/hmac"
@@ -51,9 +51,6 @@ func (h *Handler) SetInviteMessageCallback(callback func(userID, inviteLink stri
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Println("=== Prodamus Webhook Received ===")
 
-	// Log headers and raw body BEFORE any parsing
-	h.logHeadersRaw(r)
-
 	// Read raw body for logging before parsing
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -61,11 +58,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	r.Body.Close() // Body is now consumed, need to recreate for parsing
+	r.Body.Close()
 	log.Printf("Raw Body (%d bytes):\n%s", len(bodyBytes), string(bodyBytes))
-
-	// Recreate the body reader for parsing
-	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
 	// Validate HTTP method
 	if r.Method != http.MethodPost {
@@ -74,16 +68,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read and parse request body
-	payload, payloadMap, _, err := h.readAndParseBody(r)
+	// Read and parse request body (pass pre-read bodyBytes to avoid double-read)
+	payload, payloadMap, err := h.parseFormBody(bodyBytes)
 	if err != nil {
-		log.Printf("Failed to read and parse body: %v", err)
+		log.Printf("Failed to parse form body: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	// Log the request details
-	h.logRequest(r, bodyBytes)
+	logger.LogRequest(r, bodyBytes)
 	log.Printf("Webhook payload: %+v", payload)
 	log.Printf("Key fields - order_id: %s, customer_extra: %s, sum: %s, payment_status: %s, payment_type: %s",
 		payload.OrderID, payload.CustomerExtra, payload.Sum, payload.PaymentStatus, payload.PaymentType)
@@ -132,23 +126,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
 }
 
-// readAndParseBody reads the request body and unmarshals it into a WebhookPayload and map[string]interface{} for signature verification
-func (h *Handler) readAndParseBody(r *http.Request) (*models.WebhookPayload, map[string]interface{}, []byte, error) {
-	bodyBytes, err := io.ReadAll(r.Body)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to read request body: %w", err)
-	}
-	defer r.Body.Close()
-
+// parseFormBody parses the form data from pre-read body bytes
+func (h *Handler) parseFormBody(bodyBytes []byte) (*models.WebhookPayload, map[string]interface{}, error) {
 	var payload models.WebhookPayload
 
-	// Parse application/x-www-form-urlencoded form
-	if err := r.ParseForm(); err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to parse form: %w", err)
+	// Parse URL-encoded form data directly from bytes
+	values, err := url.ParseQuery(string(bodyBytes))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse form data: %w", err)
 	}
-
-	// Get values from form
-	values := r.Form
 
 	// Create map for signature verification
 	payloadMap := make(map[string]interface{})
@@ -191,7 +177,7 @@ func (h *Handler) readAndParseBody(r *http.Request) (*models.WebhookPayload, map
 		}
 	}
 
-	return &payload, payloadMap, bodyBytes, nil
+	return &payload, payloadMap, nil
 }
 
 // isSuccessStatus checks if the status indicates a successful payment
@@ -289,135 +275,4 @@ func (h *Handler) generateInviteLink(userID string) (string, error) {
 	}
 
 	return inviteLink, nil
-}
-
-func (h *Handler) logRequest(r *http.Request, bodyBytes []byte) {
-	// Log Content-Type explicitly at the top
-	contentType := r.Header.Get("Content-Type")
-	log.Printf("Content-Type: %s", contentType)
-
-	// Log basic request info
-	h.logRequestBasic(r)
-
-	// Log headers
-	h.logHeaders(r.Header)
-
-	// Log query parameters
-	h.logQueryParams(r.URL.Query())
-
-	// Log body
-	h.logBody(contentType, bodyBytes)
-
-	log.Println("=== End of Webhook Request ===")
-}
-
-// logRequestBasic logs basic request information
-func (h *Handler) logRequestBasic(r *http.Request) {
-	log.Printf("Method: %s", r.Method)
-	log.Printf("URL: %s", r.URL.String())
-	log.Printf("Host: %s", r.Host)
-}
-
-// logHeadersRaw logs all request headers (before parsing)
-func (h *Handler) logHeadersRaw(r *http.Request) {
-	log.Println("--- Raw Headers ---")
-	log.Printf("Content-Type: %s", r.Header.Get("Content-Type"))
-	for key, values := range r.Header {
-		for _, value := range values {
-			log.Printf("  %s: %s", key, value)
-		}
-	}
-
-	if sign := r.Header.Get("Sign"); sign != "" {
-		log.Printf("[Sign Header]: %s", sign)
-	}
-}
-
-// logHeaders logs all request headers
-func (h *Handler) logHeaders(header http.Header) {
-	log.Println("--- Headers ---")
-	for key, values := range header {
-		for _, value := range values {
-			log.Printf("  %s: %s", key, value)
-		}
-	}
-
-	if sign := header.Get("Sign"); sign != "" {
-		log.Printf("[Sign Header]: %s", sign)
-	}
-}
-
-// logQueryParams logs query parameters
-func (h *Handler) logQueryParams(query url.Values) {
-	log.Println("--- Query Parameters ---")
-	for key, values := range query {
-		for _, value := range values {
-			log.Printf("  %s: %s", key, value)
-		}
-	}
-}
-
-// logBody logs the request body with appropriate formatting
-func (h *Handler) logBody(contentType string, bodyBytes []byte) {
-	log.Printf("--- Body (raw) ---")
-	log.Printf("%s", string(bodyBytes))
-
-	log.Println("--- Parsed Body ---")
-
-	if contentType == "application/json" || contentType == "application/json; charset=utf-8" {
-		var jsonData interface{}
-		if err := json.Unmarshal(bodyBytes, &jsonData); err != nil {
-			log.Printf("Error parsing JSON: %v", err)
-		} else {
-			h.logJSONData(jsonData, "")
-		}
-	} else {
-		log.Printf("Non-JSON content type: %s", contentType)
-		// Parse and display all form-data fields
-		values, err := url.ParseQuery(string(bodyBytes))
-		if err != nil {
-			log.Printf("Error parsing form-data: %v", err)
-		} else {
-			for key, vals := range values {
-				for _, val := range vals {
-					log.Printf("  %s: %s", key, val)
-				}
-			}
-		}
-	}
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func (h *Handler) logJSONData(data interface{}, indent string) {
-	switch v := data.(type) {
-	case map[string]interface{}:
-		for key, value := range v {
-			switch val := value.(type) {
-			case map[string]interface{}:
-				log.Printf("%s%s:", indent, key)
-				h.logJSONData(val, indent+"  ")
-			case []interface{}:
-				log.Printf("%s%s (array, len=%d):", indent, key, len(val))
-				for i, item := range val {
-					log.Printf("%s  [%d]:", indent, i)
-					h.logJSONData(item, indent+"    ")
-				}
-			default:
-				log.Printf("%s%s: %v (%T)", indent, key, val, val)
-			}
-		}
-	case []interface{}:
-		for i, item := range v {
-			log.Printf("%s[%d]:", indent, i)
-			h.logJSONData(item, indent+"  ")
-		}
-	default:
-		log.Printf("%s%v (%T)", indent, v, v)
-	}
 }
