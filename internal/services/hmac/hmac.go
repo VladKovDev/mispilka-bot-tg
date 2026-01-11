@@ -6,45 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
-	"net/url"
 	"reflect"
 	"sort"
 	"strings"
 )
-
-// VerifySignatureFromFormValues verifies a signature using raw form values from a webhook.
-// This is used for Prodamus webhook verification where ALL fields from the POST body
-// must be included in the signature calculation.
-// Keys are transformed from PHP notation (e.g., "products[0][name]") to Go notation
-// (e.g., "products[0].name") before signature calculation.
-func VerifySignatureFromFormValues(values url.Values, secretKey, receivedSignature string) (bool, error) {
-	if receivedSignature == "" {
-		return false, fmt.Errorf("received signature is empty")
-	}
-
-	// Convert url.Values (map[string][]string) to map[string]string with key transformation
-	// Transform PHP-style array keys to Go notation for signature calculation
-	data := make(map[string]string)
-	for key, vals := range values {
-		if len(vals) > 0 {
-			data[TransformPHPKeyToGoKey(key)] = vals[0]
-		}
-	}
-
-	log.Printf("values for signature: %+v", values)
-	log.Printf("data for signature: %+v", data)
-
-	// Calculate expected signature using all fields
-	expectedSignature, err := CreateSignature(data, secretKey)
-	if err != nil {
-		return false, err
-	}
-	log.Printf("expectedSignature: %s", expectedSignature)
-
-	// Compare signatures case-insensitively (as per Prodamus docs)
-	return strings.EqualFold(expectedSignature, receivedSignature), nil
-}
 
 // CreateSignature creates a signature according to Prodamus algorithm:
 // 1. Convert all values to strings

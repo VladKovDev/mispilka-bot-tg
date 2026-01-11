@@ -71,7 +71,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse form-encoded request body
-	payload, rawFormValues, err := h.parseFormBody(bodyBytes)
+	payload, err := h.parseFormBody(bodyBytes)
 	if err != nil {
 		log.Printf("Failed to parse form body: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
@@ -81,8 +81,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Log the request details for debugging
 	h.logWebhookRequest(r, bodyBytes, payload)
 
-	// Verify signature from headers using ALL raw form values
-	if !h.verifySignature(r, *payload, rawFormValues) {
+	// Verify signature from headers using the properly decoded payload struct
+	// The payload struct has correct nested structure which matches PHP's JSON format
+	if !h.verifySignature(r, *payload) {
 		log.Printf("Invalid signature for order_id: %s", payload.OrderID)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Invalid signature"))
@@ -122,11 +123,11 @@ func (h *Handler) readRequestBody(r *http.Request) ([]byte, error) {
 }
 
 // parseFormBody parses URL-encoded form data into a WebhookPayload struct
-// Returns the decoded payload and the raw form values (original PHP notation)
-func (h *Handler) parseFormBody(bodyBytes []byte) (*models.WebhookPayload, url.Values, error) {
+// Returns the decoded payload with correct nested structure
+func (h *Handler) parseFormBody(bodyBytes []byte) (*models.WebhookPayload, error) {
 	values, err := url.ParseQuery(string(bodyBytes))
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse form data: %w", err)
+		return nil, fmt.Errorf("failed to parse form data: %w", err)
 	}
 
 	// Transform PHP-style array keys to go-playground/form format.
@@ -141,10 +142,10 @@ func (h *Handler) parseFormBody(bodyBytes []byte) (*models.WebhookPayload, url.V
 	var payload models.WebhookPayload
 	decoder := form.NewDecoder()
 	if err := decoder.Decode(&payload, transformedValues); err != nil {
-		return nil, nil, fmt.Errorf("failed to decode form values: %w", err)
+		return nil, fmt.Errorf("failed to decode form values: %w", err)
 	}
 
-	return &payload, values, nil
+	return &payload, nil
 }
 
 // logWebhookRequest logs the webhook request details and payment status
@@ -192,7 +193,8 @@ func mapProducts(src []models.Product) []services.SignatureProduct {
 
 // verifySignature validates the webhook signature using Prodamus algorithm
 // Documentation: https://help.prodamus.ru/payform/integracii/rest-api/instrukcii-dlya-samostoyatelnaya-integracii-servisov#kak-prinyat-uvedomlenie-ob-uspeshnoi-oplate
-func (h *Handler) verifySignature(r *http.Request, payload models.WebhookPayload, rawFormValues url.Values) bool {
+// Uses the decoded payload struct which has correct nested structure matching PHP's JSON format
+func (h *Handler) verifySignature(r *http.Request, payload models.WebhookPayload) bool {
 	if h.secretKey == "" {
 		log.Println("Warning: PRODAMUS_SECRET_KEY is not set, rejecting webhook")
 		return false
@@ -204,9 +206,9 @@ func (h *Handler) verifySignature(r *http.Request, payload models.WebhookPayload
 		return false
 	}
 
-	// Use ALL raw form values for signature calculation (not just a subset)
-	// The rawFormValues contain all fields in original PHP notation from Prodamus
-	isValid, err := hmac.VerifySignatureFromFormValues(rawFormValues, h.secretKey, receivedSignature)
+	// Use the properly decoded payload struct for signature calculation
+	// The payload struct has nested structure (e.g., products[0].name) which matches PHP's JSON format
+	isValid, err := hmac.VerifySignature(payload, h.secretKey, receivedSignature)
 	if err != nil {
 		log.Printf("Signature verification error: %v", err)
 		return false
