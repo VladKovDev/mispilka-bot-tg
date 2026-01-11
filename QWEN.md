@@ -47,12 +47,11 @@ mispilka-bot-tg/
 │       └── users.go         # User data management
 ├── data/
 │   ├── messages/            # Message text templates (Markdown)
+│   ├── assets/images/       # Message images (PNG format) - created manually on server
 │   ├── commands.json        # Command definitions (currently empty)
 │   ├── messages.json        # Message queue and metadata configuration
 │   ├── schedule_backup.json # Scheduled task persistence
 │   └── users.json           # User database
-├── assets/
-│   └── images/              # Message images (PNG format)
 └── Makefile                 # Build automation
 ```
 
@@ -119,8 +118,8 @@ The bot requires a `.env` file with the following variables:
 - **cmd/app/** - Entry point only; minimal logic
 - **internal/** - Private application code, not intended for external use
 - **config/** - Configuration handling
-- **data/** - Runtime data storage (JSON files, not committed to git)
-- **assets/** - Static assets (images, documents)
+- **data/** - Runtime data storage (JSON files, images, not committed to git)
+  - **data/assets/images/** - Message images (PNG format) - created manually on server
 
 ### Code Organization
 
@@ -163,7 +162,8 @@ Messages are configured in `data/messages.json` with the structure:
 
 Message content files (Markdown) are expected in `data/messages/{message_name}.md` or custom template file.
 
-Images are expected in `assets/images/{message_name}.PNG` (uppercase PNG extension).
+Images are expected in `data/assets/images/{message_name}.PNG` (uppercase PNG extension).
+The `data/assets/images/` directory must be created manually on the server.
 
 **Placeholders supported in message text and buttons:**
 - `{{payment_price}}` - Product price from config

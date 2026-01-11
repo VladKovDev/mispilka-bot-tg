@@ -24,7 +24,7 @@ const (
 // Directory paths
 const (
 	MessagesDataDir  = "data/messages"
-	ImagesDataDir    = "assets/images"
+	ImagesDataDir    = "data/assets/images"
 	MessageExtension = ".md"
 	ImageExtension   = ".PNG"
 )
