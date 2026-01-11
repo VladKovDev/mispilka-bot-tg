@@ -11,12 +11,14 @@ import (
 func LogRequest(r *http.Request, bodyBytes []byte) {
 	contentType := r.Header.Get("Content-Type")
 
+	log.Println("\n=== Start Request ===")
+
 	LogRequestBasic(r)
-	LogHeaders(r.Header, "Raw Headers")
+	LogHeaders(r.Header)
 	LogQueryParams(r.URL.Query())
 	LogBody(contentType, bodyBytes)
 
-	log.Println("=== End of Webhook Request ===")
+	log.Println("=== End Request ===\n ")
 }
 
 // LogRequestBasic logs basic request information
@@ -27,8 +29,8 @@ func LogRequestBasic(r *http.Request) {
 }
 
 // LogHeaders logs all request headers
-func LogHeaders(header http.Header, section string) {
-	log.Printf("--- %s ---", section)
+func LogHeaders(header http.Header) {
+	log.Printf("--- Headers ---")
 	for key, values := range header {
 		for _, value := range values {
 			log.Printf("  %s: %s", key, value)

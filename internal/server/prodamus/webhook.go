@@ -78,10 +78,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Log the request details
 	logger.LogRequest(r, bodyBytes)
+
 	log.Printf("Webhook payload: %+v", payload)
-	log.Printf("Key fields - order_id: %s, customer_extra: %s, sum: %s, payment_status: %s, payment_type: %s",
-		payload.OrderID, payload.CustomerExtra, payload.Sum, payload.PaymentStatus, payload.PaymentType)
-	log.Printf("Customer info - phone: %s, email: %s", payload.CustomerPhone, payload.CustomerEmail)
 
 	// Log payment status
 	if h.isSuccessStatus(payload.PaymentStatus) {
@@ -213,7 +211,8 @@ func (h *Handler) verifySignature(r *http.Request, payload map[string]interface{
 		return false
 	}
 
-	log.Printf("Signature verification: valid=%v, received=%s", isValid, receivedSignature)
+	log.Printf("\nSignature payload: %+v", signaturePayload)
+	log.Printf("Signature verification: valid=%v, received=%s\n", isValid, receivedSignature)
 
 	if !isValid {
 		log.Println("Warning: Signature verification failed - webhook may be from unauthorized source")
