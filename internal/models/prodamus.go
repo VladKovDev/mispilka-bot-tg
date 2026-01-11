@@ -22,6 +22,7 @@ type WebhookPayload struct {
 	OrderNum                 string    `form:"order_num" json:"order_num"`
 	Domain                   string    `form:"domain" json:"domain"`
 	Sum                      string    `form:"sum" json:"sum"` // amount
+	Currency                 string    `form:"currency" json:"currency"`
 	CustomerPhone            string    `form:"customer_phone" json:"customer_phone"`
 	CustomerEmail            string    `form:"customer_email" json:"customer_email"`
 	CustomerExtra            string    `form:"customer_extra" json:"customer_extra"` // user_id (your custom field)

@@ -1,11 +1,11 @@
 package prodamus
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -14,7 +14,7 @@ import (
 	"mispilkabot/internal/services"
 	"mispilkabot/internal/services/hmac"
 
-	"github.com/ajg/form"
+	"github.com/go-playground/form/v4"
 )
 
 // Handler handles Prodamus webhook requests
@@ -123,8 +123,14 @@ func (h *Handler) readRequestBody(r *http.Request) ([]byte, error) {
 
 // parseFormBody parses URL-encoded form data into a WebhookPayload struct
 func (h *Handler) parseFormBody(bodyBytes []byte) (*models.WebhookPayload, error) {
+	values, err := url.ParseQuery(string(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse form data: %w", err)
+	}
+
 	var payload models.WebhookPayload
-	if err := form.NewDecoder(bytes.NewReader(bodyBytes)).Decode(&payload); err != nil {
+	decoder := form.NewDecoder()
+	if err := decoder.Decode(&payload, values); err != nil {
 		return nil, fmt.Errorf("failed to decode form values: %w", err)
 	}
 
