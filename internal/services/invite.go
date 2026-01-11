@@ -46,9 +46,10 @@ func GenerateInviteLink(userID, groupID string, botToken string) (string, error)
 	log.Printf("[DEBUG] Telegram API response: %s", string(body))
 
 	var result struct {
-		Ok          bool   `json:"ok"`
-		Description string `json:"description"`
-		InviteLink  string `json:"invite_link"`
+		Ok     bool `json:"ok"`
+		Result struct {
+			InviteLink string `json:"invite_link"`
+		} `json:"result"`
 	}
 
 	if err := json.Unmarshal(body, &result); err != nil {
@@ -56,11 +57,11 @@ func GenerateInviteLink(userID, groupID string, botToken string) (string, error)
 	}
 
 	if !result.Ok {
-		return "", fmt.Errorf("API error: %s", result.Description)
+		return "", fmt.Errorf("API error: ok=false")
 	}
 
-	log.Printf("[DEBUG] Invite link created successfully: %q", result.InviteLink)
-	return result.InviteLink, nil
+	log.Printf("[DEBUG] Invite link created successfully: %q", result.Result.InviteLink)
+	return result.Result.InviteLink, nil
 }
 
 // RevokeInviteLink revokes an existing invite link for a chat
