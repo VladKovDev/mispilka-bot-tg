@@ -3,8 +3,30 @@ package services
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+)
+
+// Placeholder delimiters for message templates
+const (
+	PlaceholderStart = "{{"
+	PlaceholderEnd   = "}}"
+)
+
+// Button type constants
+const (
+	ButtonTypeURL      = "url"
+	ButtonTypeCallback = "callback"
+)
+
+// Directory paths
+const (
+	MessagesDataDir  = "data/messages"
+	ImagesDataDir    = "assets/images"
+	MessageExtension = ".md"
+	ImageExtension   = ".PNG"
 )
 
 type MessagesList []string
@@ -34,16 +56,9 @@ type InlineKeyboardRowConfig struct {
 // InlineButtonConfig представляет одну инлайн-кнопку с поддержкой
 // типов "url" и "callback"
 type InlineButtonConfig struct {
-	// Текст кнопки (метка)
-	Text string `json:"text"`
-
-	// Тип кнопки: "url", "callback"
-	Type string `json:"type"`
-
-	// URL для кнопки-ссылки
-	URL string `json:"url,omitempty"`
-
-	// Данные колбэка для кнопки с данными
+	Text         string `json:"text"`
+	Type         string `json:"type"`
+	URL          string `json:"url,omitempty"`
 	CallbackData string `json:"callback_data,omitempty"`
 }
 
@@ -57,7 +72,7 @@ type Messages struct {
 func getMessages() (Messages, error) {
 	messages, err := ReadJSONRetry[Messages]("data/messages.json", 3)
 	if err != nil {
-		return messages, err
+		return Messages{}, fmt.Errorf("failed to read messages: %w", err)
 	}
 	return messages, nil
 }
@@ -65,25 +80,28 @@ func getMessages() (Messages, error) {
 func getMessageMap() (MessageMap, error) {
 	messages, err := getMessages()
 	if err != nil {
-		return messages.Messages, nil
+		return nil, err
 	}
 	return messages.Messages, nil
 }
 
 func getMessageData(messageName string) (MessageData, error) {
-	var messageData MessageData
 	messageMap, err := getMessageMap()
 	if err != nil {
-		return messageData, err
+		return MessageData{}, err
 	}
-	return messageMap[messageName], nil
+
+	messageData, exists := messageMap[messageName]
+	if !exists {
+		return MessageData{}, fmt.Errorf("message %q not found", messageName)
+	}
+	return messageData, nil
 }
 
 func getMessagesList() (MessagesList, error) {
-	var messagesList MessagesList
 	messages, err := getMessages()
 	if err != nil {
-		return messagesList, nil
+		return nil, err
 	}
 	return messages.MessagesList.reverse(), nil
 }
@@ -99,63 +117,36 @@ func (messagesList MessagesList) reverse() MessagesList {
 func GetMessageText(messageName string) (string, error) {
 	// Проверить, есть ли у сообщения пользовательский template_file
 	messageData, err := getMessageData(messageName)
-	if err == nil && messageData.TemplateFile != "" {
-		path := fmt.Sprintf("data/messages/%s", messageData.TemplateFile)
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return "", err
-		}
-		return string(data), nil
-	}
-
-	// По умолчанию использовать message_name.md
-	path := fmt.Sprintf("data/messages/%s.md", messageName)
-	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
+	}
+
+	var path string
+	if messageData.TemplateFile != "" {
+		path = filepath.Join(MessagesDataDir, messageData.TemplateFile)
+	} else {
+		path = filepath.Join(MessagesDataDir, messageName+MessageExtension)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to read message file %q: %w", path, err)
 	}
 	return string(data), nil
 }
 
-// ReplacePlaceholder заменяет плейсхолдеры в формате {placeholder} на заданное значение
+// ReplacePlaceholder заменяет плейсхолдеры в формате {{placeholder}} на заданное значение
 func ReplacePlaceholder(text, placeholder, value string) string {
-	searchPattern := "{" + placeholder + "}"
-	return replaceAll(text, searchPattern, value)
+	searchPattern := PlaceholderStart + placeholder + PlaceholderEnd
+	return strings.ReplaceAll(text, searchPattern, value)
 }
 
-// ReplaceAllPlaceholders заменяет все плейсхолдеры формата {key} на значения из карты
+// ReplaceAllPlaceholders заменяет все плейсхолдеры формата {{key}} на значения из карты
 func ReplaceAllPlaceholders(text string, values map[string]string) string {
 	for key, value := range values {
 		text = ReplacePlaceholder(text, key, value)
 	}
 	return text
-}
-
-// replaceAll — вспомогательная функция для замены всех вхождений подстроки
-func replaceAll(text, old, new string) string {
-	result := ""
-	runes := []rune(text)
-	oldRunes := []rune(old)
-	oldLen := len(oldRunes)
-
-	for i := 0; i < len(runes); i++ {
-		if i+oldLen <= len(runes) {
-			match := true
-			for j := 0; j < oldLen; j++ {
-				if runes[i+j] != oldRunes[j] {
-					match = false
-					break
-				}
-			}
-			if match {
-				result += new
-				i += oldLen - 1
-				continue
-			}
-		}
-		result += string(runes[i])
-	}
-	return result
 }
 
 func GetTiming(messageName string) (Timing, error) {
@@ -178,7 +169,7 @@ func GetURLButton(messageName string) (string, string, error) {
 	if messageData.InlineKeyboard != nil && len(messageData.InlineKeyboard.Rows) > 0 {
 		for _, row := range messageData.InlineKeyboard.Rows {
 			for _, btn := range row.Buttons {
-				if btn.Type == "url" && btn.Text != "" && btn.URL != "" {
+				if btn.Type == ButtonTypeURL && btn.Text != "" && btn.URL != "" {
 					return btn.URL, btn.Text, nil
 				}
 			}
@@ -218,9 +209,9 @@ func ToTelegramKeyboard(config *InlineKeyboardConfig) tgbotapi.InlineKeyboardMar
 		for _, btnConfig := range rowConfig.Buttons {
 			var btn tgbotapi.InlineKeyboardButton
 			switch btnConfig.Type {
-			case "url":
+			case ButtonTypeURL:
 				btn = tgbotapi.NewInlineKeyboardButtonURL(btnConfig.Text, btnConfig.URL)
-			case "callback":
+			case ButtonTypeCallback:
 				btn = tgbotapi.NewInlineKeyboardButtonData(btnConfig.Text, btnConfig.CallbackData)
 			}
 			if btn.Text != "" {
@@ -245,10 +236,11 @@ func LastMessage(messagesList MessagesList) (string, error) {
 }
 
 func GetPhoto(messageName string) (string, error) {
-	path := fmt.Sprintf("assets/images/%v.PNG", messageName)
+	path := filepath.Join(ImagesDataDir, messageName+ImageExtension)
+
 	_, err := os.Stat(path)
-	if err == nil || !os.IsNotExist(err) {
-		return path, nil
+	if err != nil {
+		return "", fmt.Errorf("не удалось получить фото: %w", err)
 	}
-	return "", fmt.Errorf("не удалось получить фото: %w", err)
+	return path, nil
 }

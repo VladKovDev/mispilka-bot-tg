@@ -166,9 +166,9 @@ Message content files (Markdown) are expected in `data/messages/{message_name}.m
 Images are expected in `assets/images/{message_name}.PNG` (uppercase PNG extension).
 
 **Placeholders supported in message text and buttons:**
-- `{payment_price}` - Product price from config
-- `{payment_link}` - User's unique payment link
-- `{invite_link}` - User's unique group invite link (for group_invite message)
+- `{{payment_price}}` - Product price from config
+- `{{payment_link}}` - User's unique payment link
+- `{{invite_link}}` - User's unique group invite link (for group_invite message)
 
 **Special Messages:**
 - `start` - Initial message sent after /start command
@@ -213,7 +213,7 @@ The `PRIVATE_GROUP_ID` environment variable specifies the private group for paid
 - Processes successful payments (`status: success` or `paid`)
 - Generates unique Telegram group invite links via `createChatInviteLink`
 - Stores invite link in `users.json`
-- Sends `group_invite` message with `{invite_link}` placeholder
+- Sends `group_invite` message with `{{invite_link}}` placeholder
 - Revokes invite link after user joins (tracked via `chat_member` update)
 - Logs all request data: headers, query params, body
 - Always returns 200 OK to prevent retry loops
@@ -253,6 +253,6 @@ No automated tests are currently present in the project. Manual testing is perfo
 
 - The `internal/repository` directory is currently empty and reserved for future database abstraction
 - Message queue is processed from the end (LIFO behavior for immediate consumption)
-- Keyboard buttons with unresolved placeholders (`{...}`) are filtered out to prevent invalid URLs
+- Keyboard buttons with unresolved placeholders (`{{...}}`) are filtered out to prevent invalid URLs
 - Graceful shutdown is supported via SIGINT/SIGTERM signals
 - Both HTTP server and Telegram bot run concurrently in separate goroutines

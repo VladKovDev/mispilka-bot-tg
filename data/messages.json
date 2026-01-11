@@ -14,7 +14,7 @@
               {
                 "type": "url",
                 "text": "ОПЛАТИТЬ КУРС 💳",
-                "url": "{payment_link}"
+                "url": "{{payment_link}}"
               }
             ]
           }
@@ -34,7 +34,7 @@
               {
                 "type": "url",
                 "text": "Забрать курс",
-                "url": "{payment_link}"
+                "url": "{{payment_link}}"
               }
             ]
           }
@@ -54,7 +54,7 @@
               {
                 "type": "url",
                 "text": "Хочу на курс",
-                "url": "{payment_link}"
+                "url": "{{payment_link}}"
               }
             ]
           }
@@ -74,7 +74,7 @@
               {
                 "type": "url",
                 "text": "Забрать курс",
-                "url": "{payment_link}"
+                "url": "{{payment_link}}"
               }
             ]
           }
@@ -93,8 +93,8 @@
             "buttons": [
               {
                 "type": "url",
-                "text": "Оплатить курс за {payment_price}Р",
-                "url": "{payment_link}"
+                "text": "Оплатить курс за {{payment_price}}Р",
+                "url": "{{payment_link}}"
               }
             ]
           }
@@ -110,7 +110,7 @@
               {
                 "type": "url",
                 "text": "Войти в закрытую группу 🚪",
-                "url": "{invite_link}"
+                "url": "{{invite_link}}"
               }
             ]
           }

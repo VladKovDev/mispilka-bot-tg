@@ -87,32 +87,34 @@ func (b *Bot) handleUpdates(ctx context.Context, updates tgbotapi.UpdatesChannel
 				log.Println("Updates channel closed")
 				return
 			}
-		// Handle chat_member updates (group join tracking)
-		if update.ChatMember != nil {
-			b.handleChatMember(update.ChatMember, privateChatID)
-			continue
-		}
 
-		chatID := update.FromChat().ID
-		if chatID == privateChatID {
-			if update.Message != nil && len(update.Message.NewChatMembers) > 0 {
-				for _, newUser := range update.Message.NewChatMembers {
-					services.ChangeIsMessaging(fmt.Sprint(newUser.ID), false)
-				}
+			// Handle chat_member updates (group join tracking)
+			if update.ChatMember != nil {
+				b.handleChatMember(update.ChatMember, privateChatID)
+				continue
 			}
-			continue
-		}
-		if update.CallbackQuery != nil {
-			callback := update.CallbackQuery
-			b.handleCallbackQuery(callback)
 
-		}
-		if update.Message == nil {
-			continue
-		}
-		if update.Message.IsCommand() {
-			b.handleCommand(update.Message)
-		}
+			chatID := update.FromChat().ID
+			if chatID == privateChatID {
+				if update.Message != nil && len(update.Message.NewChatMembers) > 0 {
+					for _, newUser := range update.Message.NewChatMembers {
+						services.ChangeIsMessaging(fmt.Sprint(newUser.ID), false)
+					}
+				}
+				continue
+			}
+
+			if update.CallbackQuery != nil {
+				b.handleCallbackQuery(update.CallbackQuery)
+			}
+
+			if update.Message == nil {
+				continue
+			}
+
+			if update.Message.IsCommand() {
+				b.handleCommand(update.Message)
+			}
 		}
 	}
 }
@@ -120,19 +122,19 @@ func (b *Bot) handleUpdates(ctx context.Context, updates tgbotapi.UpdatesChannel
 func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery) {
 	switch callback.Data {
 	case "accept":
-		accept(b, callback)
-	// case "decline":
-	// declaine(b, callback)
+		b.acceptCallback(callback)
+	case "decline":
+		b.declineCallback(callback)
 	default:
 		callbackResponse := tgbotapi.NewCallback(callback.ID, "")
-		b.bot.Send(callbackResponse)
-		return
-
+		if _, err := b.bot.Send(callbackResponse); err != nil {
+			log.Printf("failed to send callback response: %v", err)
+		}
 	}
 }
 
-func accept(b *Bot, callBack *tgbotapi.CallbackQuery) {
-	userID := fmt.Sprint(callBack.From.ID)
+func (b *Bot) acceptCallback(callback *tgbotapi.CallbackQuery) {
+	userID := fmt.Sprint(callback.From.ID)
 
 	// Set messaging status to true
 	services.ChangeIsMessaging(userID, true)
@@ -143,7 +145,7 @@ func accept(b *Bot, callBack *tgbotapi.CallbackQuery) {
 	if err != nil {
 		log.Printf("[PAYMENT_ERROR] Failed to generate payment link for user %s: %v", userID, err)
 		log.Printf("[PAYMENT_ERROR] Prodamus API URL: %s", b.cfg.ProdamusAPIURL)
-		log.Printf("[PAYMENT_ERROR] User %s will continue without payment link. Keyboard buttons with {payment_link} placeholder will be filtered out.", userID)
+		log.Printf("[PAYMENT_ERROR] User %s will continue without payment link. Keyboard buttons with {{payment_link}} placeholder will be filtered out.", userID)
 		// Still continue even if payment link generation fails
 		// Messages with payment buttons will be filtered to avoid invalid URL errors
 	} else {
@@ -156,22 +158,29 @@ func accept(b *Bot, callBack *tgbotapi.CallbackQuery) {
 
 	// Update button to "✅ Принято"
 	edit := tgbotapi.NewEditMessageReplyMarkup(
-		callBack.From.ID,
-		callBack.Message.MessageID,
+		callback.From.ID,
+		callback.Message.MessageID,
 		dataButton("✅ Принято", "decline"))
-	b.bot.Send(edit)
+	if _, err := b.bot.Send(edit); err != nil {
+		log.Printf("failed to update button markup for user %s: %v", userID, err)
+	}
 
 	// Start message scheduling
 	services.SetSchedule(time.Now(), userID, b.sendMessage)
 }
 
-func declaine(b *Bot, callBack *tgbotapi.CallbackQuery) {
-	services.ChangeIsMessaging(fmt.Sprint(callBack.From.ID), false)
+func (b *Bot) declineCallback(callback *tgbotapi.CallbackQuery) {
+	userID := fmt.Sprint(callback.From.ID)
+
+	services.ChangeIsMessaging(userID, false)
+
 	edit := tgbotapi.NewEditMessageReplyMarkup(
-		callBack.From.ID,
-		callBack.Message.MessageID,
+		callback.From.ID,
+		callback.Message.MessageID,
 		dataButton("🔲 Принимаю", "accept"))
-	b.bot.Send(edit)
+	if _, err := b.bot.Send(edit); err != nil {
+		log.Printf("failed to update button markup for user %s: %v", userID, err)
+	}
 }
 
 func (b *Bot) sendMessage(chatID string) {
@@ -198,6 +207,7 @@ func (b *Bot) sendMessage(chatID string) {
 
 	keyboardConfig, err := services.GetInlineKeyboard(last)
 	if err != nil {
+		log.Printf("failed to get keyboard config for message %s: %v", last, err)
 		return
 	}
 
@@ -219,7 +229,6 @@ func (b *Bot) sendMessage(chatID string) {
 			m.ReplyMarkup = keyboard
 		}
 		msg = m
-
 	} else {
 		p := tgbotapi.NewPhoto(parseID(chatID), tgbotapi.FilePath(photoPath))
 		p.Caption = text
@@ -229,6 +238,7 @@ func (b *Bot) sendMessage(chatID string) {
 		}
 		msg = p
 	}
+
 	if _, err := b.bot.Send(msg); err != nil {
 		log.Printf("send error to %s: %v", chatID, err)
 		return
@@ -278,6 +288,9 @@ func (b *Bot) SendInviteMessage(userID string, inviteLink string) {
 	log.Printf("invite message sent successfully to %s", userID)
 }
 
+// processKeyboard processes an inline keyboard configuration by applying placeholder values
+// and filtering out buttons with incomplete data (e.g., missing URLs or unreplaced placeholders).
+// This is particularly useful for filtering out payment buttons when payment links are unavailable.
 func processKeyboard(config *services.InlineKeyboardConfig, values map[string]string) tgbotapi.InlineKeyboardMarkup {
 	if config == nil {
 		return tgbotapi.InlineKeyboardMarkup{}
@@ -289,22 +302,27 @@ func processKeyboard(config *services.InlineKeyboardConfig, values map[string]st
 		var validButtons []tgbotapi.InlineKeyboardButton
 
 		for _, btn := range row.Buttons {
-			if btn.Type != "url" {
+			// Handle non-URL buttons (callback type)
+			if btn.Type != services.ButtonTypeURL {
 				if btn.Text != "" {
 					var newBtn tgbotapi.InlineKeyboardButton
 					switch btn.Type {
-					case "callback":
+					case services.ButtonTypeCallback:
 						newBtn = tgbotapi.NewInlineKeyboardButtonData(btn.Text, btn.CallbackData)
 					}
-					validButtons = append(validButtons, newBtn)
+					if newBtn.Text != "" {
+						validButtons = append(validButtons, newBtn)
+					}
 				}
 				continue
 			}
 
+			// Handle URL buttons - replace placeholders and validate
 			text := services.ReplaceAllPlaceholders(btn.Text, values)
 			url := services.ReplaceAllPlaceholders(btn.URL, values)
 
-			if strings.Contains(url, "{") || url == "" {
+			// Filter out buttons with unreplaced placeholders (still contain {{...}}) or empty URLs
+			if strings.Contains(url, services.PlaceholderStart) || url == "" {
 				continue
 			}
 
