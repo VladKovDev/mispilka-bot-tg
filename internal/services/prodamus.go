@@ -33,9 +33,9 @@ func NewProdamusClient(cfg *config.Config) *ProdamusClient {
 func (p *ProdamusClient) GeneratePaymentLink(userID string, productName string, price string, paidContent string) (string, error) {
 	// Build data map for signature creation according to Prodamus algorithm
 	signData := map[string]interface{}{
-		"do":             "link",
-		"paid_content":   paidContent,
-		"order_id":       userID,
+		"do":           "link",
+		"paid_content": paidContent,
+		// "order_id":       userID,
 		"payments_limit": "1",
 		"products": []map[string]interface{}{
 			{
@@ -59,11 +59,11 @@ func (p *ProdamusClient) GeneratePaymentLink(userID string, productName string, 
 	params.Set("do", "link")
 	params.Set("paid_content", paidContent)
 	params.Set("payments_limit", "1")
-	params.Set("order_id", userID)
+	// params.Set("order_id", userID)
 	params.Set("products[0][name]", productName)
 	params.Set("products[0][price]", price)
 	params.Set("products[0][quantity]", "1")
-	params.Set("signature", signature)
+	params.Set("sign", signature)
 
 	// Construct full URL with query string
 	fullURL := fmt.Sprintf("%s?%s", p.apiURL, params.Encode())

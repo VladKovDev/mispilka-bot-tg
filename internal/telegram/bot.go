@@ -124,7 +124,7 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery) {
 	case "accept":
 		b.acceptCallback(callback)
 	case "decline":
-		b.declineCallback(callback)
+		// b.declineCallback(callback)
 	default:
 		callbackResponse := tgbotapi.NewCallback(callback.ID, "")
 		if _, err := b.bot.Send(callbackResponse); err != nil {
