@@ -5,3 +5,9 @@
 .env
 config/config.json
 .serena
+
+# Data directory: ignore everything except examples and README.md
+data/*
+!data/README.md
+!data/example/
+!data/example/**
