@@ -37,8 +37,8 @@ func main() {
 	srv.SetGenerateInviteLinkCallback(bot.GenerateInviteLink)
 
 	// Wire up the invite message callback
-	srv.SetInviteMessageCallback(func(chatID, inviteLink string) {
-		bot.SendInviteMessage(chatID, inviteLink)
+	srv.SetInviteMessageCallback(func(userID, inviteLink string) {
+		bot.SendInviteMessage(userID, inviteLink)
 	})
 
 	// Start HTTP server in a separate goroutine
@@ -54,7 +54,7 @@ func main() {
 	botDone := make(chan struct{})
 	go func() {
 		defer close(botDone)
-		bot.Start()
+		bot.Start(ctx)
 	}()
 
 	// Set up signal handling for graceful shutdown

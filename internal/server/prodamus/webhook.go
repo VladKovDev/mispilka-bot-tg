@@ -1,14 +1,13 @@
 package prodamus
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"mispilkabot/internal/models"
 	"mispilkabot/internal/services"
+	"mispilkabot/internal/services/hmac"
 	"net/http"
 	"net/url"
 	"sync"
@@ -18,8 +17,8 @@ import (
 // Handler handles Prodamus webhook requests
 type Handler struct {
 	secretKey            string
-	generateInviteLinkFn func(chatID, groupID string) (string, error)
-	sendInviteMessage    func(chatID, inviteLink string)
+	generateInviteLinkFn func(userID, groupID string) (string, error)
+	sendInviteMessage    func(userID, inviteLink string)
 	mu                   sync.Mutex // Protect user mutations
 	privateGroupID       string     // Private group ID for invite link generation
 }
@@ -39,22 +38,13 @@ func (h *Handler) SetPrivateGroupID(groupID string) {
 }
 
 // SetGenerateInviteLinkCallback sets the callback for generating invite links
-func (h *Handler) SetGenerateInviteLinkCallback(callback func(chatID, groupID string) (string, error)) {
+func (h *Handler) SetGenerateInviteLinkCallback(callback func(userID, groupID string) (string, error)) {
 	h.generateInviteLinkFn = callback
 }
 
 // SetInviteMessageCallback sets the callback for sending invite messages
-func (h *Handler) SetInviteMessageCallback(callback func(chatID, inviteLink string)) {
+func (h *Handler) SetInviteMessageCallback(callback func(userID, inviteLink string)) {
 	h.sendInviteMessage = callback
-}
-
-type WebhookPayload struct {
-	OrderID   string `json:"order_id"`
-	Amount    string `json:"amount"`
-	Currency  string `json:"currency"`
-	Status    string `json:"status"`
-	PaymentID string `json:"payment_id"`
-	Signature string `json:"signature"`
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +58,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Read and parse request body
-	payload, bodyBytes, err := h.readAndParseBody(r)
+	payload, payloadMap, bodyBytes, err := h.readAndParseBody(r)
 	if err != nil {
 		log.Printf("Failed to read and parse body: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
@@ -78,80 +68,161 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Log the request details
 	h.logRequest(r, bodyBytes)
 	log.Printf("Webhook payload: %+v", payload)
+	log.Printf("Key fields - order_id: %s, customer_extra: %s, sum: %s, payment_status: %s, payment_type: %s",
+		payload.OrderID, payload.CustomerExtra, payload.Sum, payload.PaymentStatus, payload.PaymentType)
+	log.Printf("Customer info - phone: %s, email: %s", payload.CustomerPhone, payload.CustomerEmail)
 
-	// Verify signature
-	if !h.verifySignature(bodyBytes) {
+	// Log payment status
+	if h.isSuccessStatus(payload.PaymentStatus) {
+		log.Printf("Payment status: SUCCESS (order_id: %s)", payload.OrderID)
+	} else if h.isFailedStatus(payload.PaymentStatus) {
+		log.Printf("Payment status: FAILED (order_id: %s, status: %s, description: %s)",
+			payload.OrderID, payload.PaymentStatus, payload.PaymentStatusDescription)
+	} else {
+		log.Printf("Payment status: UNEXPECTED %s (order_id: %s, status: %s, description: %s)",
+			payload.PaymentStatus, payload.OrderID, payload.PaymentStatus, payload.PaymentStatusDescription)
+	}
+
+	// Verify signature (Sign is in headers according to Prodamus docs)
+	if !h.verifySignature(r, payloadMap) {
 		log.Printf("Invalid signature for order_id: %s", payload.OrderID)
-		w.WriteHeader(http.StatusUnauthorized)
+		// Return non-200 code to indicate failure and stop processing
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Invalid signature"))
 		return
 	}
 
 	// Process successful payments
-	if h.isSuccessStatus(payload.Status) {
-		if err := h.processPayment(payload.OrderID); err != nil {
+	if h.isSuccessStatus(payload.PaymentStatus) {
+		// Determine user_id: customer_extra has priority over order_id
+		userID := payload.CustomerExtra
+
+		if userID == "" {
+			log.Printf("Error: No user_id found in payload")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if err := h.processPayment(userID, payload); err != nil {
 			log.Printf("Error processing payment: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		log.Printf("Payment processed successfully for chat_id: %s", payload.OrderID)
+		log.Printf("Payment processed successfully for user_id: %s", userID)
 	}
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
 }
 
-// readAndParseBody reads the request body and unmarshals it into a WebhookPayload
-func (h *Handler) readAndParseBody(r *http.Request) (*WebhookPayload, []byte, error) {
+// readAndParseBody reads the request body and unmarshals it into a WebhookPayload and map[string]interface{} for signature verification
+func (h *Handler) readAndParseBody(r *http.Request) (*models.WebhookPayload, map[string]interface{}, []byte, error) {
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read request body: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to read request body: %w", err)
 	}
 	defer r.Body.Close()
 
-	var payload WebhookPayload
-	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
-		return nil, nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
+	var payload models.WebhookPayload
+
+	// Parse multipart/form-data form (max 10MB)
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to parse multipart form: %w", err)
+	}
+	defer r.MultipartForm.RemoveAll()
+
+	// Get values from form
+	values := r.Form
+
+	// Create map for signature verification
+	payloadMap := make(map[string]interface{})
+	for key, vals := range values {
+		if len(vals) > 0 {
+			// For signature verification, use the first value
+			// Это можно допустить, так как в массиве приходят только товары
+			// И мы создаем ссылку на оплату ОДНОГО товара, TODO: в будущем можно расширить
+			payloadMap[key] = vals[0]
+		}
 	}
 
-	return &payload, bodyBytes, nil
+	// Map form-data to WebhookPayload (Prodamus field names)
+	payload.OrderID = values.Get("order_id")
+	payload.OrderNum = values.Get("order_num")
+	payload.Domain = values.Get("domain")
+	payload.Sum = values.Get("sum")
+	payload.CustomerPhone = values.Get("customer_phone")
+	payload.CustomerEmail = values.Get("customer_email")
+	payload.CustomerExtra = values.Get("customer_extra")
+	payload.PaymentType = values.Get("payment_type")
+	payload.PaymentInit = values.Get("payment_init")
+	payload.Commission = values.Get("commission")
+	payload.CommissionSum = values.Get("commission_sum")
+	payload.Attempt = values.Get("attempt")
+	payload.Date = values.Get("date")
+	payload.PaymentStatus = values.Get("payment_status")
+	payload.PaymentStatusDescription = values.Get("payment_status_description")
+
+	// Parse products (may come as JSON string)
+	if productsStr := values.Get("products"); productsStr != "" {
+		if err := json.Unmarshal([]byte(productsStr), &payload.Products); err != nil {
+			log.Printf("Warning: Failed to parse products as JSON: %v", err)
+		} else {
+			// Also add products to payloadMap for signature verification
+			var productsArr []interface{}
+			if err := json.Unmarshal([]byte(productsStr), &productsArr); err == nil {
+				payloadMap["products"] = productsArr
+			}
+		}
+	}
+
+	return &payload, payloadMap, bodyBytes, nil
 }
 
 // isSuccessStatus checks if the status indicates a successful payment
 func (h *Handler) isSuccessStatus(status string) bool {
-	return status == "success" || status == "paid"
+	return status == models.PaymentStatusSuccess
 }
 
-func (h *Handler) verifySignature(body []byte) bool {
+// isFailedStatus checks if status indicates a failed/canceled payment
+func (h *Handler) isFailedStatus(status string) bool {
+	return status == models.PaymentStatusOrderCanceled || status == models.PaymentStatusOrderDenied
+}
+
+// Проверить подпись согласно Prodamus Docs: https://help.prodamus.ru/payform/integracii/rest-api/instrukcii-dlya-samostoyatelnaya-integracii-servisov#kak-prinyat-uvedomlenie-ob-uspeshnoi-oplate
+func (h *Handler) verifySignature(r *http.Request, payload map[string]interface{}) bool {
 	if h.secretKey == "" {
 		log.Println("Warning: PRODAMUS_SECRET_KEY is not set, skipping signature verification")
 		return true
 	}
 
-	mac := hmac.New(sha256.New, []byte(h.secretKey))
-	mac.Write(body)
-	expectedSignature := hex.EncodeToString(mac.Sum(nil))
-
-	var payload WebhookPayload
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return false
-	}
-
-	receivedSignature := payload.Signature
+	// Get signature from headers (Sign header according to Prodamus docs)
+	receivedSignature := r.Header.Get("Sign")
 	if receivedSignature == "" {
-		log.Println("Warning: No signature in payload")
+		log.Println("Warning: No Sign header found")
 		return false
 	}
 
-	isValid := hmac.Equal([]byte(expectedSignature), []byte(receivedSignature))
-	log.Printf("Signature verification: expected=%s, received=%s, valid=%v", expectedSignature, receivedSignature, isValid)
+	// Verify signature using Prodamus algorithm
+	isValid, err := hmac.VerifySignature(payload, h.secretKey, receivedSignature)
+	if err != nil {
+		log.Printf("Signature verification error: %v", err)
+		return false
+	}
+
+	log.Printf("Signature verification: valid=%v, received=%s", isValid, receivedSignature)
+
+	if !isValid {
+		log.Println("Warning: Signature verification failed - webhook may be from unauthorized source")
+	}
+
 	return isValid
 }
 
-func (h *Handler) processPayment(chatID string) error {
+func (h *Handler) processPayment(userID string, payload *models.WebhookPayload) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	userData, err := services.GetUser(chatID)
+	userData, err := services.GetUser(userID)
 	if err != nil {
 		return fmt.Errorf("user not found: %w", err)
 	}
@@ -160,10 +231,13 @@ func (h *Handler) processPayment(chatID string) error {
 	userData.PaymentDate = &now
 	userData.IsMessaging = false
 
+	// Store full webhook payload as payment_info (direct assignment)
+	userData.PaymentInfo = payload
+
 	// Generate and send invite link for the paid user
-	inviteLink, err := h.generateInviteLink(chatID)
+	inviteLink, err := h.generateInviteLink(userID)
 	if err != nil {
-		log.Printf("Failed to generate invite link for %s: %v", chatID, err)
+		log.Printf("Failed to generate invite link for %s: %v", userID, err)
 		// Don't fail the webhook, just log and continue
 	} else {
 		// Update user with invite link info
@@ -171,12 +245,12 @@ func (h *Handler) processPayment(chatID string) error {
 
 		// Send invite message via callback asynchronously
 		if h.sendInviteMessage != nil {
-			go h.sendInviteMessage(chatID, inviteLink)
+			go h.sendInviteMessage(userID, inviteLink)
 		}
-		log.Printf("invite link generated and queued for sending to %s", chatID)
+		log.Printf("invite link generated and queued for sending to %s", userID)
 	}
 
-	if err := services.ChangeUser(chatID, userData); err != nil {
+	if err := services.ChangeUser(userID, userData); err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
 	}
 
@@ -184,7 +258,7 @@ func (h *Handler) processPayment(chatID string) error {
 }
 
 // generateInviteLink creates an invite link for the user
-func (h *Handler) generateInviteLink(chatID string) (string, error) {
+func (h *Handler) generateInviteLink(userID string) (string, error) {
 	if h.privateGroupID == "" {
 		return "", fmt.Errorf("PRIVATE_GROUP_ID not set")
 	}
@@ -193,7 +267,7 @@ func (h *Handler) generateInviteLink(chatID string) (string, error) {
 		return "", fmt.Errorf("generateInviteLink callback not set")
 	}
 
-	inviteLink, err := h.generateInviteLinkFn(chatID, h.privateGroupID)
+	inviteLink, err := h.generateInviteLinkFn(userID, h.privateGroupID)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate invite link: %w", err)
 	}
@@ -232,6 +306,10 @@ func (h *Handler) logHeaders(header http.Header) {
 			log.Printf("  %s: %s", key, value)
 		}
 	}
+
+	if sign := header.Get("Sign"); sign != "" {
+		log.Printf("[Sign Header]: %s", sign)
+	}
 }
 
 // logQueryParams logs query parameters
@@ -260,7 +338,17 @@ func (h *Handler) logBody(contentType string, bodyBytes []byte) {
 		}
 	} else {
 		log.Printf("Non-JSON content type: %s", contentType)
-		log.Printf("Body preview: %s", string(bodyBytes[:min(len(bodyBytes), 200)]))
+		// Parse and display all form-data fields
+		values, err := url.ParseQuery(string(bodyBytes))
+		if err != nil {
+			log.Printf("Error parsing form-data: %v", err)
+		} else {
+			for key, vals := range values {
+				for _, val := range vals {
+					log.Printf("  %s: %s", key, val)
+				}
+			}
+		}
 	}
 }
 

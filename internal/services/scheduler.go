@@ -46,15 +46,15 @@ func SetSchedules(sendMessage func(string)) error {
 	return nil
 }
 
-func SetSchedule(sendTime time.Time, chatID string, sendMessage func(string)) {
+func SetSchedule(sendTime time.Time, userID string, sendMessage func(string)) {
 	delay := time.Until(sendTime)
 	if delay <= 0 {
-		sendMessage(chatID)
+		sendMessage(userID)
 		return
 	}
 
 	time.AfterFunc(delay, func() {
-		sendMessage(chatID)
+		sendMessage(userID)
 	})
 }
 

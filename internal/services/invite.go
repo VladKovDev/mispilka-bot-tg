@@ -11,7 +11,7 @@ import (
 
 // GenerateInviteLink creates a new invite link for a chat/group with member limit set to 1
 // Returns the invite link URL or an error if generation fails
-func GenerateInviteLink(chatID, groupID string, botToken string) (string, error) {
+func GenerateInviteLink(userID, groupID string, botToken string) (string, error) {
 	groupIDInt, err := strconv.ParseInt(groupID, 10, 64)
 	if err != nil {
 		return "", fmt.Errorf("invalid groupID format: %w", err)

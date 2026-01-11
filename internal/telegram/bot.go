@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"mispilkabot/config"
@@ -29,8 +30,8 @@ func (b *Bot) GetToken() string {
 }
 
 // GenerateInviteLink creates a new invite link for the specified group
-func (b *Bot) GenerateInviteLink(chatID, groupID string) (string, error) {
-	return services.GenerateInviteLink(chatID, groupID, b.bot.Token)
+func (b *Bot) GenerateInviteLink(userID, groupID string) (string, error) {
+	return services.GenerateInviteLink(userID, groupID, b.bot.Token)
 }
 
 // RevokeInviteLink revokes an existing invite link
@@ -47,7 +48,7 @@ func (b *Bot) Request(c tgbotapi.Chattable) (tgbotapi.APIResponse, error) {
 	return *resp, nil
 }
 
-func (b *Bot) Start() {
+func (b *Bot) Start(ctx context.Context) {
 	log.Printf("Authorized on account %s", b.bot.Self.UserName)
 
 	services.CheckStorage("data/users.json")
@@ -64,7 +65,7 @@ func (b *Bot) Start() {
 
 	privateChatID := parseID(b.cfg.PrivateGroupID)
 
-	b.handleUpdates(b.initUpdatesChanel(), privateChatID)
+	b.handleUpdates(ctx, b.initUpdatesChanel(), privateChatID)
 }
 
 func (b *Bot) initUpdatesChanel() tgbotapi.UpdatesChannel {
@@ -74,8 +75,18 @@ func (b *Bot) initUpdatesChanel() tgbotapi.UpdatesChannel {
 	return b.bot.GetUpdatesChan(u)
 }
 
-func (b *Bot) handleUpdates(updates tgbotapi.UpdatesChannel, privateChatID int64) {
-	for update := range updates {
+func (b *Bot) handleUpdates(ctx context.Context, updates tgbotapi.UpdatesChannel, privateChatID int64) {
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("Shutting down bot...")
+			b.bot.StopReceivingUpdates()
+			return
+		case update, ok := <-updates:
+			if !ok {
+				log.Println("Updates channel closed")
+				return
+			}
 		// Handle chat_member updates (group join tracking)
 		if update.ChatMember != nil {
 			b.handleChatMember(update.ChatMember, privateChatID)
@@ -102,6 +113,7 @@ func (b *Bot) handleUpdates(updates tgbotapi.UpdatesChannel, privateChatID int64
 		if update.Message.IsCommand() {
 			b.handleCommand(update.Message)
 		}
+		}
 	}
 }
 
@@ -120,25 +132,25 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery) {
 }
 
 func accept(b *Bot, callBack *tgbotapi.CallbackQuery) {
-	chatID := fmt.Sprint(callBack.From.ID)
+	userID := fmt.Sprint(callBack.From.ID)
 
 	// Set messaging status to true
-	services.ChangeIsMessaging(chatID, true)
+	services.ChangeIsMessaging(userID, true)
 
 	// Generate payment link via Prodamus
 	prodamusClient := services.NewProdamusClient(b.cfg)
-	paymentLink, err := prodamusClient.GeneratePaymentLink(b.cfg.ProdamusProductName, b.cfg.ProdamusProductPrice, b.cfg.ProdamusProductPaidContent)
+	paymentLink, err := prodamusClient.GeneratePaymentLink(userID, b.cfg.ProdamusProductName, b.cfg.ProdamusProductPrice, b.cfg.ProdamusProductPaidContent)
 	if err != nil {
-		log.Printf("[PAYMENT_ERROR] Failed to generate payment link for user %s: %v", chatID, err)
+		log.Printf("[PAYMENT_ERROR] Failed to generate payment link for user %s: %v", userID, err)
 		log.Printf("[PAYMENT_ERROR] Prodamus API URL: %s", b.cfg.ProdamusAPIURL)
-		log.Printf("[PAYMENT_ERROR] User %s will continue without payment link. Keyboard buttons with {payment_link} placeholder will be filtered out.", chatID)
+		log.Printf("[PAYMENT_ERROR] User %s will continue without payment link. Keyboard buttons with {payment_link} placeholder will be filtered out.", userID)
 		// Still continue even if payment link generation fails
 		// Messages with payment buttons will be filtered to avoid invalid URL errors
 	} else {
-		log.Printf("[PAYMENT_SUCCESS] Generated payment link for user %s: %s", chatID, paymentLink)
+		log.Printf("[PAYMENT_SUCCESS] Generated payment link for user %s: %s", userID, paymentLink)
 		// Save payment link to user data
-		if err := services.SetPaymentLink(chatID, paymentLink); err != nil {
-			log.Printf("[PAYMENT_ERROR] Failed to save payment link for user %s: %v", chatID, err)
+		if err := services.SetPaymentLink(userID, paymentLink); err != nil {
+			log.Printf("[PAYMENT_ERROR] Failed to save payment link for user %s: %v", userID, err)
 		}
 	}
 
@@ -150,7 +162,7 @@ func accept(b *Bot, callBack *tgbotapi.CallbackQuery) {
 	b.bot.Send(edit)
 
 	// Start message scheduling
-	services.SetSchedule(time.Now(), chatID, b.sendMessage)
+	services.SetSchedule(time.Now(), userID, b.sendMessage)
 }
 
 func declaine(b *Bot, callBack *tgbotapi.CallbackQuery) {
@@ -233,7 +245,7 @@ func (b *Bot) sendMessage(chatID string) {
 	services.SetNextSchedule(chatID, last, b.sendMessage)
 }
 
-func (b *Bot) SendInviteMessage(chatID string, inviteLink string) {
+func (b *Bot) SendInviteMessage(userID string, inviteLink string) {
 	text, err := services.GetMessageText("group_invite")
 	if err != nil {
 		log.Printf("failed to load group_invite template: %v", err)
@@ -250,7 +262,7 @@ func (b *Bot) SendInviteMessage(chatID string, inviteLink string) {
 	text = services.ReplaceAllPlaceholders(text, values)
 	keyboard := processKeyboard(keyboardConfig, values)
 
-	m := tgbotapi.NewMessage(parseID(chatID), text)
+	m := tgbotapi.NewMessage(parseID(userID), text)
 	m.ParseMode = "HTML"
 	m.DisableWebPagePreview = true
 
@@ -259,11 +271,11 @@ func (b *Bot) SendInviteMessage(chatID string, inviteLink string) {
 	}
 
 	if _, err := b.bot.Send(m); err != nil {
-		log.Printf("failed to send invite message to %s: %v", chatID, err)
+		log.Printf("failed to send invite message to %s: %v", userID, err)
 		return
 	}
 
-	log.Printf("invite message sent successfully to %s", chatID)
+	log.Printf("invite message sent successfully to %s", userID)
 }
 
 func processKeyboard(config *services.InlineKeyboardConfig, values map[string]string) tgbotapi.InlineKeyboardMarkup {

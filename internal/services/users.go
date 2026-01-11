@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"log"
+	"mispilkabot/internal/models"
 	"strconv"
 	"time"
 
@@ -10,15 +11,16 @@ import (
 )
 
 type User struct {
-	UserName     string     `json:"user_name"`
-	RegTime      time.Time  `json:"reg_time"`
-	IsMessaging  bool       `json:"is_messaging"`
-	MessagesList []string   `json:"messages_list"`
-	PaymentDate  *time.Time `json:"payment_date,omitempty"`
-	PaymentLink  string     `json:"payment_link,omitempty"`
-	InviteLink   string     `json:"invite_link,omitempty"`
-	JoinedGroup  bool       `json:"joined_group,omitempty"`
-	JoinedAt     *time.Time `json:"joined_at,omitempty"`
+	UserName     string                 `json:"user_name"`
+	RegTime      time.Time              `json:"reg_time"`
+	IsMessaging  bool                   `json:"is_messaging"`
+	MessagesList []string               `json:"messages_list"`
+	PaymentDate  *time.Time             `json:"payment_date,omitempty"`
+	PaymentLink  string                 `json:"payment_link,omitempty"`
+	InviteLink   string                 `json:"invite_link,omitempty"`
+	JoinedGroup  bool                   `json:"joined_group,omitempty"`
+	JoinedAt     *time.Time             `json:"joined_at,omitempty"`
+	PaymentInfo  *models.WebhookPayload `json:"payment_info,omitempty"` // full webhook payload
 }
 
 type UserMap map[string]User

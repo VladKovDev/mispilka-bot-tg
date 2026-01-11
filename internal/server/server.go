@@ -37,12 +37,12 @@ func New(cfg *config.Config) *Server {
 }
 
 // SetGenerateInviteLinkCallback sets the callback for generating invite links
-func (s *Server) SetGenerateInviteLinkCallback(callback func(chatID, groupID string) (string, error)) {
+func (s *Server) SetGenerateInviteLinkCallback(callback func(userID, groupID string) (string, error)) {
 	s.prodamusHandler.SetGenerateInviteLinkCallback(callback)
 }
 
 // SetInviteMessageCallback sets the callback for sending invite messages
-func (s *Server) SetInviteMessageCallback(callback func(chatID, inviteLink string)) {
+func (s *Server) SetInviteMessageCallback(callback func(userID, inviteLink string)) {
 	s.prodamusHandler.SetInviteMessageCallback(callback)
 }
 

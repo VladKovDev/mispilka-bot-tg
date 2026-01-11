@@ -9,34 +9,61 @@ import (
 	"strings"
 
 	"mispilkabot/config"
+	"mispilkabot/internal/services/hmac"
 )
 
 // ProdamusClient handles payment link generation via Prodamus API
 type ProdamusClient struct {
-	apiURL            string
-	sysCode           string
-	productUniqueName string
-	httpClient        *http.Client
+	apiURL     string
+	secretKey  string
+	httpClient *http.Client
 }
 
 // NewProdamusClient creates a new Prodamus client with config
 func NewProdamusClient(cfg *config.Config) *ProdamusClient {
 	return &ProdamusClient{
 		apiURL:     cfg.ProdamusAPIURL,
+		secretKey:  cfg.ProdamusSecret,
 		httpClient: &http.Client{},
 	}
 }
 
-// GeneratePaymentLink creates a payment link via Prodamus API via GET request
+// GeneratePaymentLink creates a payment link via Prodamus API with signature
 // Documentation: https://help.prodamus.ru/payform/integracii/rest-api/
-func (p *ProdamusClient) GeneratePaymentLink(productName string, price string, paidContent string) (string, error) {
+func (p *ProdamusClient) GeneratePaymentLink(userID string, productName string, price string, paidContent string) (string, error) {
+	// Build data map for signature creation according to Prodamus algorithm
+	signData := map[string]interface{}{
+		"do":             "link",
+		"paid_content":   paidContent,
+		"order_id":       userID,
+		"payments_limit": "1",
+		"products": []map[string]interface{}{
+			{
+				"name":     productName,
+				"price":    price,
+				"quantity": "1",
+			},
+		},
+	}
+
+	// Create signature using Prodamus algorithm
+	signature, err := hmac.CreateSignature(signData, p.secretKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to create signature: %w", err)
+	}
+
+	log.Printf("Generated signature: %s", signature)
+
 	// Build query parameters for GET request
 	params := url.Values{}
 	params.Set("do", "link")
 	params.Set("paid_content", paidContent)
+	params.Set("payments_limit", "1")
+	params.Set("order_id", userID)
 	params.Set("products[0][name]", productName)
 	params.Set("products[0][price]", price)
 	params.Set("products[0][quantity]", "1")
+	params.Set("signature", signature)
 
 	// Construct full URL with query string
 	fullURL := fmt.Sprintf("%s?%s", p.apiURL, params.Encode())
