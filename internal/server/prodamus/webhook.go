@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -128,9 +129,23 @@ func (h *Handler) parseFormBody(bodyBytes []byte) (*models.WebhookPayload, error
 		return nil, fmt.Errorf("failed to parse form data: %w", err)
 	}
 
+	// Transform PHP-style array keys to go-playground/form format.
+	// Prodamus webhooks send form data as "products[0][name]" (PHP notation),
+	// but the form decoder expects "products[0].name" (Go notation).
+	// This transformation converts the nested bracket notation to dot notation.
+	transformedValues := make(url.Values)
+	for key, vals := range values {
+		transformedKey := strings.ReplaceAll(key, "][", "].")
+		// Remove trailing ] from field names (converts products[0].name] to products[0].name)
+		if strings.Contains(transformedKey, "[") && strings.HasSuffix(transformedKey, "]") {
+			transformedKey = transformedKey[:len(transformedKey)-1]
+		}
+		transformedValues[transformedKey] = vals
+	}
+
 	var payload models.WebhookPayload
 	decoder := form.NewDecoder()
-	if err := decoder.Decode(&payload, values); err != nil {
+	if err := decoder.Decode(&payload, transformedValues); err != nil {
 		return nil, fmt.Errorf("failed to decode form values: %w", err)
 	}
 
