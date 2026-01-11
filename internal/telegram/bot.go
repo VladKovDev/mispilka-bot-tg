@@ -94,6 +94,12 @@ func (b *Bot) handleUpdates(ctx context.Context, updates tgbotapi.UpdatesChannel
 				continue
 			}
 
+			// Handle my_chat_member updates (bot's own member status changes)
+			if update.MyChatMember != nil {
+				b.handleMyChatMember(update.MyChatMember, privateChatID)
+				continue
+			}
+
 			chatID := update.FromChat().ID
 			if chatID == privateChatID {
 				if update.Message != nil && len(update.Message.NewChatMembers) > 0 {
@@ -405,4 +411,13 @@ func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateCh
 	} else {
 		log.Printf("invite link revoked for user %s", userID)
 	}
+}
+
+// handleMyChatMember processes my_chat_member updates (bot's own member status changes)
+func (b *Bot) handleMyChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateChatID int64) {
+	// Log the event for monitoring purposes
+	log.Printf("Bot's member status changed in chat %d: %s -> %s",
+		chatMember.Chat.ID,
+		chatMember.OldChatMember.Status,
+		chatMember.NewChatMember.Status)
 }
