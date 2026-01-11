@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
 
@@ -72,7 +71,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse form-encoded request body
-	payload, err := h.parseFormBody(bodyBytes)
+	payload, rawFormValues, err := h.parseFormBody(bodyBytes)
 	if err != nil {
 		log.Printf("Failed to parse form body: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
@@ -82,8 +81,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Log the request details for debugging
 	h.logWebhookRequest(r, bodyBytes, payload)
 
-	// Verify signature from headers
-	if !h.verifySignature(r, *payload) {
+	// Verify signature from headers using ALL raw form values
+	if !h.verifySignature(r, *payload, rawFormValues) {
 		log.Printf("Invalid signature for order_id: %s", payload.OrderID)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Invalid signature"))
@@ -123,10 +122,11 @@ func (h *Handler) readRequestBody(r *http.Request) ([]byte, error) {
 }
 
 // parseFormBody parses URL-encoded form data into a WebhookPayload struct
-func (h *Handler) parseFormBody(bodyBytes []byte) (*models.WebhookPayload, error) {
+// Returns the decoded payload and the raw form values (original PHP notation)
+func (h *Handler) parseFormBody(bodyBytes []byte) (*models.WebhookPayload, url.Values, error) {
 	values, err := url.ParseQuery(string(bodyBytes))
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse form data: %w", err)
+		return nil, nil, fmt.Errorf("failed to parse form data: %w", err)
 	}
 
 	// Transform PHP-style array keys to go-playground/form format.
@@ -135,21 +135,16 @@ func (h *Handler) parseFormBody(bodyBytes []byte) (*models.WebhookPayload, error
 	// This transformation converts the nested bracket notation to dot notation.
 	transformedValues := make(url.Values)
 	for key, vals := range values {
-		transformedKey := strings.ReplaceAll(key, "][", "].")
-		// Remove trailing ] from field names (converts products[0].name] to products[0].name)
-		if strings.Contains(transformedKey, "[") && strings.HasSuffix(transformedKey, "]") {
-			transformedKey = transformedKey[:len(transformedKey)-1]
-		}
-		transformedValues[transformedKey] = vals
+		transformedValues[hmac.TransformPHPKeyToGoKey(key)] = vals
 	}
 
 	var payload models.WebhookPayload
 	decoder := form.NewDecoder()
 	if err := decoder.Decode(&payload, transformedValues); err != nil {
-		return nil, fmt.Errorf("failed to decode form values: %w", err)
+		return nil, nil, fmt.Errorf("failed to decode form values: %w", err)
 	}
 
-	return &payload, nil
+	return &payload, values, nil
 }
 
 // logWebhookRequest logs the webhook request details and payment status
@@ -197,10 +192,10 @@ func mapProducts(src []models.Product) []services.SignatureProduct {
 
 // verifySignature validates the webhook signature using Prodamus algorithm
 // Documentation: https://help.prodamus.ru/payform/integracii/rest-api/instrukcii-dlya-samostoyatelnaya-integracii-servisov#kak-prinyat-uvedomlenie-ob-uspeshnoi-oplate
-func (h *Handler) verifySignature(r *http.Request, payload models.WebhookPayload) bool {
+func (h *Handler) verifySignature(r *http.Request, payload models.WebhookPayload, rawFormValues url.Values) bool {
 	if h.secretKey == "" {
-		log.Println("Warning: PRODAMUS_SECRET_KEY is not set, skipping signature verification")
-		return true
+		log.Println("Warning: PRODAMUS_SECRET_KEY is not set, rejecting webhook")
+		return false
 	}
 
 	receivedSignature := r.Header.Get("Sign")
@@ -209,19 +204,14 @@ func (h *Handler) verifySignature(r *http.Request, payload models.WebhookPayload
 		return false
 	}
 
-	signInput := services.SignatureInput{
-		UserID:   payload.ParamUserID,
-		Products: mapProducts(payload.Products),
-	}
-
-	signaturePayload := services.BuildSignaturePayload(signInput)
-	isValid, err := hmac.VerifySignature(signaturePayload, h.secretKey, receivedSignature)
+	// Use ALL raw form values for signature calculation (not just a subset)
+	// The rawFormValues contain all fields in original PHP notation from Prodamus
+	isValid, err := hmac.VerifySignatureFromFormValues(rawFormValues, h.secretKey, receivedSignature)
 	if err != nil {
 		log.Printf("Signature verification error: %v", err)
 		return false
 	}
 
-	log.Printf("Signature payload: %+v", signaturePayload)
 	log.Printf("Signature verification: valid=%v, received=%s", isValid, receivedSignature)
 
 	if !isValid {
@@ -268,7 +258,14 @@ func (h *Handler) handleInviteLinkGeneration(userID string, userData *services.U
 	userData.InviteLink = inviteLink
 
 	if h.sendInviteMessage != nil {
-		go h.sendInviteMessage(userID, inviteLink)
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("Panic in sendInviteMessage for user %s: %v", userID, r)
+				}
+			}()
+			h.sendInviteMessage(userID, inviteLink)
+		}()
 	}
 	log.Printf("Invite link generated and queued for sending to %s", userID)
 

@@ -6,10 +6,40 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"reflect"
 	"sort"
 	"strings"
 )
+
+// VerifySignatureFromFormValues verifies a signature using raw form values from a webhook.
+// This is used for Prodamus webhook verification where ALL fields from the POST body
+// must be included in the signature calculation.
+// Keys are transformed from PHP notation (e.g., "products[0][name]") to Go notation
+// (e.g., "products[0].name") before signature calculation.
+func VerifySignatureFromFormValues(values url.Values, secretKey, receivedSignature string) (bool, error) {
+	if receivedSignature == "" {
+		return false, fmt.Errorf("received signature is empty")
+	}
+
+	// Convert url.Values (map[string][]string) to map[string]string with key transformation
+	// Transform PHP-style array keys to Go notation for signature calculation
+	data := make(map[string]string)
+	for key, vals := range values {
+		if len(vals) > 0 {
+			data[TransformPHPKeyToGoKey(key)] = vals[0]
+		}
+	}
+
+	// Calculate expected signature using all fields
+	expectedSignature, err := CreateSignature(data, secretKey)
+	if err != nil {
+		return false, err
+	}
+
+	// Compare signatures case-insensitively (as per Prodamus docs)
+	return strings.EqualFold(expectedSignature, receivedSignature), nil
+}
 
 // CreateSignature creates a signature according to Prodamus algorithm:
 // 1. Convert all values to strings
@@ -179,4 +209,16 @@ func sortMapKeys(data map[string]interface{}) {
 	for key, value := range sortedData {
 		data[key] = value
 	}
+}
+
+// TransformPHPKeyToGoKey converts PHP-style array keys to Go notation.
+// PHP notation: products[0][name]
+// Go notation: products[0].name
+func TransformPHPKeyToGoKey(key string) string {
+	transformedKey := strings.ReplaceAll(key, "][", "].")
+	// Remove trailing ] from field names
+	if strings.Contains(transformedKey, "[") && strings.HasSuffix(transformedKey, "]") {
+		transformedKey = transformedKey[:len(transformedKey)-1]
+	}
+	return transformedKey
 }
