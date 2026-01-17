@@ -163,45 +163,59 @@ func (b *Bot) formatUser(entry userEntry, index int) string {
 
 	var sb strings.Builder
 
-	// Header with index and name
+	// 1. Header with index and name
 	sb.WriteString(fmt.Sprintf("<b>%d. %s</b>\n", index+1, displayName))
 
-	// Registration info
+	// 2. Phone number (if exists)
+	if user.PaymentInfo != nil && user.PaymentInfo.CustomerPhone != "" {
+		sb.WriteString(fmt.Sprintf("Телефон: %s\n", user.PaymentInfo.CustomerPhone))
+	} else {
+		sb.WriteString("Телефон: не указан\n")
+	}
+
+	// 3. Registration info
 	sb.WriteString(fmt.Sprintf("Регистрация: %s\n", user.RegTime.Format("02.01.2006 15:04")))
 
-	// Status indicators
+	// 4. Status (with fixed text)
 	sb.WriteString("Статус: ")
 	if user.IsMessaging {
-		sb.WriteString("Принял условия")
+		sb.WriteString("Принял условия обработки перс. данных")
 	} else {
-		sb.WriteString("Не принял условия")
+		sb.WriteString("Не принял условия обработки перс. данных")
 	}
 	sb.WriteString("\n")
 
-	// Payment info
-	if user.HasPaid() {
-		sb.WriteString(fmt.Sprintf("Оплата: %s\n", user.GetPaymentDate().Format("02.01.2006 15:04")))
-		if user.PaymentLink != "" {
-			sb.WriteString(fmt.Sprintf("Ссылка: %s\n", user.PaymentLink))
-		}
+	// 5. Total paid amount
+	if user.TotalPaid != "" {
+		sb.WriteString(fmt.Sprintf("Всего оплачено: %s ₽\n", user.TotalPaid))
 	} else {
-		sb.WriteString("Оплата: не оплачено\n")
+		sb.WriteString("Всего оплачено: 0.00 ₽\n")
 	}
 
-	// Group info
+	// 6. Payment info (date, link)
+	if user.HasPaid() {
+		sb.WriteString(fmt.Sprintf("Последняя оплата: %s\n", user.GetPaymentDate().Format("02.01.2006 15:04")))
+		if user.PaymentLink != "" {
+			sb.WriteString(fmt.Sprintf("Ссылка на оплату: %s\n", user.PaymentLink))
+		}
+	} else {
+		sb.WriteString("Последняя оплата: не оплачено\n")
+	}
+
+	// 7. Group info (joined date, invite link)
 	if user.HasJoined() {
 		sb.WriteString(fmt.Sprintf("Группа: вступил %s\n", user.GetJoinedAt().Format("02.01.2006 15:04")))
 		if user.InviteLink != "" {
-			sb.WriteString(fmt.Sprintf("Ссылка: %s\n", user.InviteLink))
+			sb.WriteString(fmt.Sprintf("Ссылка на группу: %s\n", user.InviteLink))
 		}
 	} else {
 		sb.WriteString("Группа: не вступил\n")
 	}
 
-	// Messages queue info
+	// 8. Messages queue info
 	sb.WriteString(fmt.Sprintf("В очереди: %d сообщений\n", len(user.MessagesList)))
 
-	// Technical info (collapsed)
+	// 9. Technical info (collapsed)
 	sb.WriteString(fmt.Sprintf("ID: <code>%s</code>\n", chatID))
 
 	return sb.String()

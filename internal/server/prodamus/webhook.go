@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync"
 	"time"
 
@@ -23,7 +24,7 @@ type Handler struct {
 	privateGroupID       string
 	generateInviteLinkFn func(userID, groupID string) (string, error)
 	sendInviteMessage    func(userID, inviteLink string)
-	mu                   sync.Mutex // Protect user mutations during payment processing
+	mu                   sync.Mutex     // Protect user mutations during payment processing
 	wg                   sync.WaitGroup // Track invite message goroutines for graceful shutdown
 }
 
@@ -175,7 +176,6 @@ func (h *Handler) isFailedStatus(status string) bool {
 	return status == models.PaymentStatusOrderCanceled || status == models.PaymentStatusOrderDenied
 }
 
-
 // verifySignature validates the webhook signature using Prodamus algorithm
 // Documentation: https://help.prodamus.ru/payform/integracii/rest-api/instrukcii-dlya-samostoyatelnaya-integracii-servisov#kak-prinyat-uvedomlenie-ob-uspeshnoi-oplate
 // Uses the decoded payload struct which has correct nested structure matching PHP's JSON format
@@ -222,6 +222,26 @@ func (h *Handler) processPayment(userID string, payload *models.WebhookPayload) 
 	userData.PaymentDate = &now
 	userData.IsMessaging = false
 	userData.PaymentInfo = payload
+
+	// Accumulate total paid amount across all payments
+	// Parse the new payment amount (format: "1000.00")
+	if payload.Sum != "" {
+		// Parse new payment amount
+		var currentTotal float64
+		if n, err := strconv.ParseFloat(payload.Sum, 64); err == nil {
+			currentTotal = n
+		}
+
+		// Add existing total if present
+		if userData.TotalPaid != "" {
+			if existingTotal, err := strconv.ParseFloat(userData.TotalPaid, 64); err == nil {
+				currentTotal += existingTotal
+			}
+		}
+
+		// Store back with 2 decimal places
+		userData.TotalPaid = fmt.Sprintf("%.2f", currentTotal)
+	}
 
 	// Generate and send invite link for the paid user
 	if err := h.handleInviteLinkGeneration(userID, &userData); err != nil {

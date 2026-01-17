@@ -20,6 +20,7 @@ type User struct {
 	JoinedGroup  bool                   `json:"joined_group,omitempty"`
 	JoinedAt     *time.Time             `json:"joined_at,omitempty"`
 	PaymentInfo  *models.WebhookPayload `json:"payment_info,omitempty"` // full webhook payload
+	TotalPaid    string                 `json:"total_paid,omitempty"`   // accumulated total payment amount across all payments
 }
 
 type UserMap map[string]User
@@ -193,7 +194,6 @@ func (u *User) GetJoinedAt() time.Time {
 	}
 	return *u.JoinedAt
 }
-
 
 // IsNewUser checks if a user with the given chat ID exists in the system.
 // Returns true if the user doesn't exist (is new), false if they exist.
