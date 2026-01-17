@@ -397,8 +397,34 @@ func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateCh
 		if user.JoinedGroup {
 			user.JoinedGroup = false
 			user.JoinedAt = nil
+
+			// For paid users, generate new invite link and send it to them
+			if user.HasPaid() {
+				newInviteLink, err := b.GenerateInviteLink(userID, b.cfg.PrivateGroupID)
+				if err != nil {
+					log.Printf("failed to generate new invite link for paid user %s: %v", userID, err)
+				} else {
+					user.InviteLink = newInviteLink
+					log.Printf("generated new invite link for paid user %s who left the group", userID)
+
+					// Send the new link to user in private message
+					parsedID, err := parseID(userID)
+					if err != nil {
+						log.Printf("failed to parse userID %s: %v", userID, err)
+					} else {
+						msg := tgbotapi.NewMessage(parsedID, fmt.Sprintf("Вы вышли из группы. Вот ваша новая ссылка для вступления:\n%s", newInviteLink))
+						msg.DisableWebPagePreview = true
+						if _, err := b.bot.Send(msg); err != nil {
+							log.Printf("failed to send new invite link to user %s: %v", userID, err)
+						} else {
+							log.Printf("sent new invite link to paid user %s", userID)
+						}
+					}
+				}
+			}
+
 			if err := services.ChangeUser(userID, user); err != nil {
-				log.Printf("failed to reset JoinedGroup for user %s: %v", userID, err)
+				log.Printf("failed to update user %s after leaving group: %v", userID, err)
 			} else {
 				log.Printf("user %s left the group, JoinedGroup reset to false", userID)
 			}
@@ -427,6 +453,15 @@ func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateCh
 					log.Printf("failed to update JoinedGroup for user %s: %v", userID, err)
 				} else {
 					log.Printf("user %s joined private group, JoinedGroup set to true (paid: %v)", userID, user.HasPaid())
+				}
+			}
+
+			// Revoke the invite link for security (one-time use)
+			if inviteLink != "" {
+				if err := b.RevokeInviteLink(b.cfg.PrivateGroupID, inviteLink); err != nil {
+					log.Printf("failed to revoke invite link for user %s: %v", userID, err)
+				} else {
+					log.Printf("invite link revoked for user %s", userID)
 				}
 			}
 		}
