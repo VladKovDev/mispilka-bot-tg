@@ -202,14 +202,15 @@ func (b *Bot) formatUser(entry userEntry, index int) string {
 		sb.WriteString("Последняя оплата: не оплачено\n")
 	}
 
-	// 7. Group info (joined date, invite link)
+	// 7. Group info (joined date)
 	if user.HasJoined() {
 		sb.WriteString(fmt.Sprintf("Группа: вступил %s\n", user.GetJoinedAt().Format("02.01.2006 15:04")))
-		if user.InviteLink != "" {
-			sb.WriteString(fmt.Sprintf("Ссылка на группу: %s\n", user.InviteLink))
-		}
 	} else {
 		sb.WriteString("Группа: не вступил\n")
+	}
+	// Show invite link if exists (independent of join status)
+	if user.InviteLink != "" {
+		sb.WriteString(fmt.Sprintf("Ссылка на группу: %s\n", user.InviteLink))
 	}
 
 	// 8. Messages queue info
