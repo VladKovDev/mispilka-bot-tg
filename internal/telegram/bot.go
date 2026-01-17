@@ -6,6 +6,7 @@ import (
 	"log"
 	"mispilkabot/config"
 	"mispilkabot/internal/services"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -128,9 +129,14 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery) {
 	case "accept":
 		b.acceptCallback(callback)
 	default:
-		callbackResponse := tgbotapi.NewCallback(callback.ID, "")
-		if _, err := b.bot.Send(callbackResponse); err != nil {
-			log.Printf("failed to send callback response: %v", err)
+		// Check if it's a pagination callback (format: users_page_1)
+		if strings.HasPrefix(callback.Data, "users_page_") {
+			b.usersPaginationCallback(callback)
+		} else {
+			callbackResponse := tgbotapi.NewCallback(callback.ID, "")
+			if _, err := b.bot.Send(callbackResponse); err != nil {
+				log.Printf("failed to send callback response: %v", err)
+			}
 		}
 	}
 }
@@ -425,4 +431,48 @@ func (b *Bot) handleMyChatMember(chatMember *tgbotapi.ChatMemberUpdated, private
 		chatMember.Chat.ID,
 		chatMember.OldChatMember.Status,
 		chatMember.NewChatMember.Status)
+}
+
+// usersPaginationCallback handles pagination button clicks for users list
+// This is defined in bot.go to be called from handleCallbackQuery
+func (b *Bot) usersPaginationCallback(callback *tgbotapi.CallbackQuery) {
+	// Import services to get users data
+	users, err := services.GetAllUsers()
+	if err != nil {
+		log.Printf("Failed to get users for pagination: %v", err)
+		resp := tgbotapi.NewCallback(callback.ID, "Ошибка")
+		b.bot.Send(resp)
+		return
+	}
+
+	// Parse page number from callback data (format: users_page_1)
+	pageStr := strings.TrimPrefix(callback.Data, "users_page_")
+	page, err := strconv.Atoi(pageStr)
+	if err != nil {
+		log.Printf("Failed to parse page number from callback: %v", err)
+		resp := tgbotapi.NewCallback(callback.ID, "")
+		b.bot.Send(resp)
+		return
+	}
+
+	// Sort users by registration time (newest first)
+	var sortedUsers []userEntry
+	for chatID, user := range users {
+		sortedUsers = append(sortedUsers, userEntry{chatID, user})
+	}
+	sort.Slice(sortedUsers, func(i, j int) bool {
+		return sortedUsers[i].user.RegTime.After(sortedUsers[j].user.RegTime)
+	})
+
+	// Call the edit function from handlers
+	if err := b.sendUsersPageEdit(callback.Message.MessageID, callback.Message.Chat.ID, sortedUsers, page); err != nil {
+		log.Printf("Failed to send users page: %v", err)
+		resp := tgbotapi.NewCallback(callback.ID, "Ошибка")
+		b.bot.Send(resp)
+		return
+	}
+
+	// Answer callback
+	resp := tgbotapi.NewCallback(callback.ID, "")
+	b.bot.Send(resp)
 }

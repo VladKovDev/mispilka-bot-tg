@@ -14,6 +14,7 @@ const (
 	commandStart   = "start"
 	commandRestart = "restart"
 	commandUsers   = "users"
+	usersPerPage   = 5
 )
 
 func (b *Bot) handleCommand(message *tgbotapi.Message) {
@@ -103,7 +104,13 @@ func (b *Bot) isAdmin(userID int64) bool {
 	return false
 }
 
-// usersCommand sends a formatted table of all users (admin only)
+// userEntry represents a user with their chat ID for display
+type userEntry struct {
+	chatID string
+	user   services.User
+}
+
+// usersCommand sends paginated list of users (admin only)
 func (b *Bot) usersCommand(message *tgbotapi.Message) error {
 	// Check if user is admin - silently ignore if not (don't reveal command exists)
 	if !b.isAdmin(message.From.ID) {
@@ -125,10 +132,14 @@ func (b *Bot) usersCommand(message *tgbotapi.Message) error {
 	}
 
 	// Sort users by registration time (newest first)
-	type userEntry struct {
-		chatID string
-		user   services.User
-	}
+	sortedUsers := b.sortUsers(users)
+
+	// Send first page
+	return b.sendUsersPage(message.Chat.ID, sortedUsers, 0)
+}
+
+// sortUsers sorts users by registration time (newest first)
+func (b *Bot) sortUsers(users services.UserMap) []userEntry {
 	var sortedUsers []userEntry
 	for chatID, user := range users {
 		sortedUsers = append(sortedUsers, userEntry{chatID, user})
@@ -136,61 +147,206 @@ func (b *Bot) usersCommand(message *tgbotapi.Message) error {
 	sort.Slice(sortedUsers, func(i, j int) bool {
 		return sortedUsers[i].user.RegTime.After(sortedUsers[j].user.RegTime)
 	})
+	return sortedUsers
+}
 
-	// Build formatted table
-	var sb strings.Builder
-	sb.WriteString("📊 <b>Список пользователей</b>\n\n")
-	sb.WriteString(fmt.Sprintf("Всего: <b>%d</b> пользователей\n\n", len(users)))
+// formatUser formats a single user entry for display
+func (b *Bot) formatUser(entry userEntry, index int) string {
+	user := entry.user
+	chatID := entry.chatID
 
-	// Table header
-	sb.WriteString("<code>")
-	sb.WriteString(fmt.Sprintf("%-15s │ %-18s │ %-7s │ %-7s │ %-6s\n", "ID", "Регистрация", "Принял", "Оплатил", "Группа"))
-	sb.WriteString("─────────────────┼────────────────────┼─────────┼─────────┼────────\n")
-
-	// Table rows
-	for _, entry := range sortedUsers {
-		chatID := entry.chatID
-		user := entry.user
-
-		// Truncate chatID for display
-		displayID := chatID
-		if len(displayID) > 15 {
-			displayID = displayID[:12] + "..."
-		}
-
-		// Format registration date
-		regDate := user.RegTime.Format("02.01 15:04")
-
-		// Status indicators
-		accepted := "❌"
-		if user.IsMessaging {
-			accepted = "✅"
-		}
-
-		paid := "❌"
-		if user.HasPaid() {
-			paid = "✅"
-		}
-
-		group := "❌"
-		if user.HasJoined() {
-			group = "✅"
-		}
-
-		sb.WriteString(fmt.Sprintf("%-15s │ %-18s │ %-7s │ %-7s │ %-6s\n", displayID, regDate, accepted, paid, group))
+	// Display name or ID
+	displayName := user.UserName
+	if displayName == "" {
+		displayName = chatID
 	}
 
-	sb.WriteString("</code>")
+	var sb strings.Builder
 
-	msg := tgbotapi.NewMessage(message.Chat.ID, sb.String())
+	// Header with index and name
+	sb.WriteString(fmt.Sprintf("<b>%d. %s</b>\n", index+1, displayName))
+
+	// Registration info
+	sb.WriteString(fmt.Sprintf("📅 Регистрация: %s\n", user.RegTime.Format("02.01.2006 15:04")))
+
+	// Status indicators
+	sb.WriteString("📊 Статус: ")
+	if user.IsMessaging {
+		sb.WriteString("✅ Принял условия")
+	} else {
+		sb.WriteString("⏳ Не принял условия")
+	}
+	sb.WriteString("\n")
+
+	// Payment info
+	if user.HasPaid() {
+		sb.WriteString(fmt.Sprintf("💳 Оплата: ✅ %s\n", user.GetPaymentDate().Format("02.01.2006 15:04")))
+		if user.PaymentLink != "" {
+			sb.WriteString(fmt.Sprintf("   Ссылка: %s\n", user.PaymentLink))
+		}
+	} else {
+		sb.WriteString("💳 Оплата: ❌ Не оплачено\n")
+	}
+
+	// Group info
+	if user.HasJoined() {
+		sb.WriteString(fmt.Sprintf("👥 Группа: ✅ Вступил %s\n", user.GetJoinedAt().Format("02.01.2006 15:04")))
+		if user.InviteLink != "" {
+			sb.WriteString(fmt.Sprintf("   Инвайт-ссылка использована\n"))
+		}
+	} else {
+		sb.WriteString("👥 Группа: ❌ Не вступил\n")
+	}
+
+	// Messages queue info
+	if len(user.MessagesList) > 0 {
+		sb.WriteString(fmt.Sprintf("📨 В очереди: %d сообщений\n", len(user.MessagesList)))
+	} else {
+		sb.WriteString("📨 В очереди: 0 сообщений\n")
+	}
+
+	// Technical info (collapsed)
+	sb.WriteString(fmt.Sprintf("🔑 ID: <code>%s</code>\n", chatID))
+
+	return sb.String()
+}
+
+// sendUsersPage sends a single page of users
+func (b *Bot) sendUsersPage(chatID int64, sortedUsers []userEntry, page int) error {
+	totalUsers := len(sortedUsers)
+	totalPages := (totalUsers + usersPerPage - 1) / usersPerPage
+
+	// Ensure page is in valid range
+	if page < 0 {
+		page = 0
+	}
+	if page >= totalPages {
+		page = totalPages - 1
+	}
+
+	// Calculate slice bounds
+	startIdx := page * usersPerPage
+	endIdx := startIdx + usersPerPage
+	if endIdx > totalUsers {
+		endIdx = totalUsers
+	}
+
+	// Build message
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("📊 <b>Пользователи</b> (стр. %d/%d, всего %d)\n\n",
+		page+1, totalPages, totalUsers))
+
+	// Add users for this page
+	for i := startIdx; i < endIdx; i++ {
+		sb.WriteString(b.formatUser(sortedUsers[i], i))
+		if i < endIdx-1 {
+			sb.WriteString("\n────────────────\n\n")
+		}
+	}
+
+	msg := tgbotapi.NewMessage(chatID, sb.String())
 	msg.ParseMode = "HTML"
+	msg.DisableWebPagePreview = true
+
+	// Add pagination keyboard
+	keyboard := b.buildUsersKeyboard(page, totalPages)
+	msg.ReplyMarkup = &keyboard
 
 	if _, err := b.bot.Send(msg); err != nil {
-		return fmt.Errorf("failed to send users table: %w", err)
+		return fmt.Errorf("failed to send users page: %w", err)
 	}
 
-	log.Printf("Admin %d (%s) requested users table, %d users shown",
-		message.From.ID, message.From.UserName, len(users))
+	return nil
+}
+
+// sendUsersPageEdit edits existing message with new page
+func (b *Bot) sendUsersPageEdit(messageID int, chatID int64, sortedUsers []userEntry, page int) error {
+	totalUsers := len(sortedUsers)
+	totalPages := (totalUsers + usersPerPage - 1) / usersPerPage
+
+	// Ensure page is in valid range
+	if page < 0 {
+		page = 0
+	}
+	if page >= totalPages {
+		page = totalPages - 1
+	}
+
+	// Calculate slice bounds
+	startIdx := page * usersPerPage
+	endIdx := startIdx + usersPerPage
+	if endIdx > totalUsers {
+		endIdx = totalUsers
+	}
+
+	// Build message
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("📊 <b>Пользователи</b> (стр. %d/%d, всего %d)\n\n",
+		page+1, totalPages, totalUsers))
+
+	// Add users for this page
+	for i := startIdx; i < endIdx; i++ {
+		sb.WriteString(b.formatUser(sortedUsers[i], i))
+		if i < endIdx-1 {
+			sb.WriteString("\n────────────────\n\n")
+		}
+	}
+
+	edit := tgbotapi.NewEditMessageText(chatID, messageID, sb.String())
+	edit.ParseMode = "HTML"
+	edit.DisableWebPagePreview = true
+
+	// Add pagination keyboard
+	keyboard := b.buildUsersKeyboard(page, totalPages)
+	edit.ReplyMarkup = &keyboard
+
+	if _, err := b.bot.Send(edit); err != nil {
+		return fmt.Errorf("failed to edit users page: %w", err)
+	}
 
 	return nil
+}
+
+// buildUsersKeyboard creates pagination keyboard
+func (b *Bot) buildUsersKeyboard(page, totalPages int) tgbotapi.InlineKeyboardMarkup {
+	if totalPages <= 1 {
+		return tgbotapi.InlineKeyboardMarkup{}
+	}
+
+	var rows [][]tgbotapi.InlineKeyboardButton
+
+	// Navigation row
+	var navRow []tgbotapi.InlineKeyboardButton
+
+	// First page button
+	if page > 1 {
+		btn := tgbotapi.NewInlineKeyboardButtonData("⏮", "users_page_0")
+		navRow = append(navRow, btn)
+	}
+
+	// Previous button
+	if page > 0 {
+		btn := tgbotapi.NewInlineKeyboardButtonData("◀️", fmt.Sprintf("users_page_%d", page-1))
+		navRow = append(navRow, btn)
+	}
+
+	// Current page indicator
+	btn := tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("%d/%d", page+1, totalPages), "ignore")
+	navRow = append(navRow, btn)
+
+	// Next button
+	if page < totalPages-1 {
+		btn := tgbotapi.NewInlineKeyboardButtonData("▶️", fmt.Sprintf("users_page_%d", page+1))
+		navRow = append(navRow, btn)
+	}
+
+	// Last page button
+	if page < totalPages-2 {
+		btn := tgbotapi.NewInlineKeyboardButtonData("⏭", fmt.Sprintf("users_page_%d", totalPages-1))
+		navRow = append(navRow, btn)
+	}
+
+	rows = append(rows, navRow)
+
+	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
