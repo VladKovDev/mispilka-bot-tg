@@ -124,7 +124,7 @@ func (b *Bot) usersCommand(message *tgbotapi.Message) error {
 	}
 
 	if len(users) == 0 {
-		msg := tgbotapi.NewMessage(message.Chat.ID, "📭 Пользователей пока нет.")
+		msg := tgbotapi.NewMessage(message.Chat.ID, "Пользователей пока нет.")
 		if _, err := b.bot.Send(msg); err != nil {
 			return fmt.Errorf("failed to send empty users message: %w", err)
 		}
@@ -167,46 +167,42 @@ func (b *Bot) formatUser(entry userEntry, index int) string {
 	sb.WriteString(fmt.Sprintf("<b>%d. %s</b>\n", index+1, displayName))
 
 	// Registration info
-	sb.WriteString(fmt.Sprintf("📅 Регистрация: %s\n", user.RegTime.Format("02.01.2006 15:04")))
+	sb.WriteString(fmt.Sprintf("Регистрация: %s\n", user.RegTime.Format("02.01.2006 15:04")))
 
 	// Status indicators
-	sb.WriteString("📊 Статус: ")
+	sb.WriteString("Статус: ")
 	if user.IsMessaging {
-		sb.WriteString("✅ Принял условия")
+		sb.WriteString("Принял условия")
 	} else {
-		sb.WriteString("⏳ Не принял условия")
+		sb.WriteString("Не принял условия")
 	}
 	sb.WriteString("\n")
 
 	// Payment info
 	if user.HasPaid() {
-		sb.WriteString(fmt.Sprintf("💳 Оплата: ✅ %s\n", user.GetPaymentDate().Format("02.01.2006 15:04")))
+		sb.WriteString(fmt.Sprintf("Оплата: %s\n", user.GetPaymentDate().Format("02.01.2006 15:04")))
 		if user.PaymentLink != "" {
-			sb.WriteString(fmt.Sprintf("   Ссылка: %s\n", user.PaymentLink))
+			sb.WriteString(fmt.Sprintf("Ссылка: %s\n", user.PaymentLink))
 		}
 	} else {
-		sb.WriteString("💳 Оплата: ❌ Не оплачено\n")
+		sb.WriteString("Оплата: не оплачено\n")
 	}
 
 	// Group info
 	if user.HasJoined() {
-		sb.WriteString(fmt.Sprintf("👥 Группа: ✅ Вступил %s\n", user.GetJoinedAt().Format("02.01.2006 15:04")))
+		sb.WriteString(fmt.Sprintf("Группа: вступил %s\n", user.GetJoinedAt().Format("02.01.2006 15:04")))
 		if user.InviteLink != "" {
-			sb.WriteString("   Инвайт-ссылка использована\n")
+			sb.WriteString(fmt.Sprintf("Ссылка: %s\n", user.InviteLink))
 		}
 	} else {
-		sb.WriteString("👥 Группа: ❌ Не вступил\n")
+		sb.WriteString("Группа: не вступил\n")
 	}
 
 	// Messages queue info
-	if len(user.MessagesList) > 0 {
-		sb.WriteString(fmt.Sprintf("📨 В очереди: %d сообщений\n", len(user.MessagesList)))
-	} else {
-		sb.WriteString("📨 В очереди: 0 сообщений\n")
-	}
+	sb.WriteString(fmt.Sprintf("В очереди: %d сообщений\n", len(user.MessagesList)))
 
 	// Technical info (collapsed)
-	sb.WriteString(fmt.Sprintf("🔑 ID: <code>%s</code>\n", chatID))
+	sb.WriteString(fmt.Sprintf("ID: <code>%s</code>\n", chatID))
 
 	return sb.String()
 }
@@ -233,7 +229,7 @@ func (b *Bot) sendUsersPage(chatID int64, sortedUsers []userEntry, page int) err
 
 	// Build message
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("📊 <b>Пользователи</b> (стр. %d/%d, всего %d)\n\n",
+	sb.WriteString(fmt.Sprintf("<b>Пользователи</b> (стр. %d/%d, всего %d)\n\n",
 		page+1, totalPages, totalUsers))
 
 	// Add users for this page
@@ -283,7 +279,7 @@ func (b *Bot) sendUsersPageEdit(messageID int, chatID int64, sortedUsers []userE
 
 	// Build message
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("📊 <b>Пользователи</b> (стр. %d/%d, всего %d)\n\n",
+	sb.WriteString(fmt.Sprintf("<b>Пользователи</b> (стр. %d/%d, всего %d)\n\n",
 		page+1, totalPages, totalUsers))
 
 	// Add users for this page
