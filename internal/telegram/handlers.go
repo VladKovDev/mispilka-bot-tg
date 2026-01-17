@@ -248,9 +248,11 @@ func (b *Bot) sendUsersPage(chatID int64, sortedUsers []userEntry, page int) err
 	msg.ParseMode = "HTML"
 	msg.DisableWebPagePreview = true
 
-	// Add pagination keyboard
-	keyboard := b.buildUsersKeyboard(page, totalPages)
-	msg.ReplyMarkup = &keyboard
+	// Add pagination keyboard only if there are multiple pages
+	if totalPages > 1 {
+		keyboard := b.buildUsersKeyboard(page, totalPages)
+		msg.ReplyMarkup = &keyboard
+	}
 
 	if _, err := b.bot.Send(msg); err != nil {
 		return fmt.Errorf("failed to send users page: %w", err)
@@ -296,9 +298,11 @@ func (b *Bot) sendUsersPageEdit(messageID int, chatID int64, sortedUsers []userE
 	edit.ParseMode = "HTML"
 	edit.DisableWebPagePreview = true
 
-	// Add pagination keyboard
-	keyboard := b.buildUsersKeyboard(page, totalPages)
-	edit.ReplyMarkup = &keyboard
+	// Add pagination keyboard only if there are multiple pages
+	if totalPages > 1 {
+		keyboard := b.buildUsersKeyboard(page, totalPages)
+		edit.ReplyMarkup = &keyboard
+	}
 
 	if _, err := b.bot.Send(edit); err != nil {
 		return fmt.Errorf("failed to edit users page: %w", err)
