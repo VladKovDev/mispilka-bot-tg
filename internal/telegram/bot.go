@@ -55,15 +55,18 @@ func (b *Bot) Start(ctx context.Context) {
 	})
 
 	if err != nil {
-		log.Printf("SetSchedules error: %v", err)
+		log.Fatalf("SetSchedules failed to restore scheduled messages: %v", err)
 	}
 
-	privateChatID := parseID(b.cfg.PrivateGroupID)
+	privateChatID, err := parseID(b.cfg.PrivateGroupID)
+	if err != nil {
+		log.Fatalf("Failed to parse PrivateGroupID from config: %v", err)
+	}
 
-	b.handleUpdates(ctx, b.initUpdatesChanel(), privateChatID)
+	b.handleUpdates(ctx, b.initUpdatesChannel(), privateChatID)
 }
 
-func (b *Bot) initUpdatesChanel() tgbotapi.UpdatesChannel {
+func (b *Bot) initUpdatesChannel() tgbotapi.UpdatesChannel {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
@@ -124,8 +127,6 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery) {
 	switch callback.Data {
 	case "accept":
 		b.acceptCallback(callback)
-	case "decline":
-		// b.declineCallback(callback)
 	default:
 		callbackResponse := tgbotapi.NewCallback(callback.ID, "")
 		if _, err := b.bot.Send(callbackResponse); err != nil {
@@ -170,20 +171,6 @@ func (b *Bot) acceptCallback(callback *tgbotapi.CallbackQuery) {
 	services.SetSchedule(time.Now(), userID, b.sendMessage)
 }
 
-func (b *Bot) declineCallback(callback *tgbotapi.CallbackQuery) {
-	userID := fmt.Sprint(callback.From.ID)
-
-	services.ChangeIsMessaging(userID, false)
-
-	edit := tgbotapi.NewEditMessageReplyMarkup(
-		callback.From.ID,
-		callback.Message.MessageID,
-		dataButton("🔲 Принимаю", "accept"))
-	if _, err := b.bot.Send(edit); err != nil {
-		log.Printf("failed to update button markup for user %s: %v", userID, err)
-	}
-}
-
 func (b *Bot) sendMessage(chatID string) {
 	data, err := services.GetUser(chatID)
 	if err != nil {
@@ -197,6 +184,7 @@ func (b *Bot) sendMessage(chatID string) {
 
 	last, err := services.LastMessage(data.MessagesList)
 	if err != nil {
+		log.Printf("failed to get last message for chat %s: %v", chatID, err)
 		return
 	}
 
@@ -223,7 +211,12 @@ func (b *Bot) sendMessage(chatID string) {
 	var msg tgbotapi.Chattable
 	photoPath, err := services.GetPhoto(last)
 	if err != nil {
-		m := tgbotapi.NewMessage(parseID(chatID), text)
+		parsedID, err := parseID(chatID)
+		if err != nil {
+			log.Printf("failed to parse chatID %s: %v", chatID, err)
+			return
+		}
+		m := tgbotapi.NewMessage(parsedID, text)
 		m.ParseMode = "HTML"
 		// m.DisableWebPagePreview = true
 		if len(keyboard.InlineKeyboard) > 0 {
@@ -231,7 +224,12 @@ func (b *Bot) sendMessage(chatID string) {
 		}
 		msg = m
 	} else {
-		p := tgbotapi.NewPhoto(parseID(chatID), tgbotapi.FilePath(photoPath))
+		parsedID, err := parseID(chatID)
+		if err != nil {
+			log.Printf("failed to parse chatID %s: %v", chatID, err)
+			return
+		}
+		p := tgbotapi.NewPhoto(parsedID, tgbotapi.FilePath(photoPath))
 		p.Caption = text
 		p.ParseMode = "HTML"
 		if len(keyboard.InlineKeyboard) > 0 {
@@ -250,6 +248,7 @@ func (b *Bot) sendMessage(chatID string) {
 
 	last, err = services.LastMessage(data.MessagesList)
 	if err != nil {
+		log.Printf("failed to get next message for chat %s: %v", chatID, err)
 		return
 	}
 
@@ -274,7 +273,12 @@ func (b *Bot) SendInviteMessage(userID string, inviteLink string) {
 
 	keyboard := processKeyboard(keyboardConfig, values)
 
-	m := tgbotapi.NewMessage(parseID(userID), text)
+	parsedID, err := parseID(userID)
+	if err != nil {
+		log.Printf("failed to parse userID %s: %v", userID, err)
+		return
+	}
+	m := tgbotapi.NewMessage(parsedID, text)
 	m.ParseMode = "HTML"
 	m.DisableWebPagePreview = true
 
@@ -353,13 +357,12 @@ func dataButton(text string, calldata string) tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(row)
 }
 
-func parseID(s string) int64 {
+func parseID(s string) (int64, error) {
 	id, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		log.Printf("Failed to parse ID: %v", err)
-		return 0
+		return 0, fmt.Errorf("failed to parse ID %q: %w", s, err)
 	}
-	return id
+	return id, nil
 }
 
 // handleChatMember processes chat_member updates to track when users join the private group

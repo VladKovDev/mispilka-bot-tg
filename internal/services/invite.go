@@ -57,8 +57,8 @@ func RevokeInviteLink(groupID, inviteLink string, bot *tgbotapi.BotAPI) error {
 
 	// Revoke chat invite link using the Telegram Bot API
 	revokeConfig := tgbotapi.RevokeChatInviteLinkConfig{
-		ChatConfig:  tgbotapi.ChatConfig{ChatID: groupIDInt},
-		InviteLink:  inviteLink,
+		ChatConfig: tgbotapi.ChatConfig{ChatID: groupIDInt},
+		InviteLink: inviteLink,
 	}
 
 	result, err := bot.Request(revokeConfig)

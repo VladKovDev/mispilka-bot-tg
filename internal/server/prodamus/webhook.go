@@ -24,6 +24,7 @@ type Handler struct {
 	generateInviteLinkFn func(userID, groupID string) (string, error)
 	sendInviteMessage    func(userID, inviteLink string)
 	mu                   sync.Mutex // Protect user mutations during payment processing
+	wg                   sync.WaitGroup // Track invite message goroutines for graceful shutdown
 }
 
 // NewHandler creates a new webhook handler
@@ -174,22 +175,6 @@ func (h *Handler) isFailedStatus(status string) bool {
 	return status == models.PaymentStatusOrderCanceled || status == models.PaymentStatusOrderDenied
 }
 
-func mapProducts(src []models.Product) []services.SignatureProduct {
-	if len(src) == 0 {
-		return nil
-	}
-
-	result := make([]services.SignatureProduct, 0, len(src))
-	for _, p := range src {
-		result = append(result, services.SignatureProduct{
-			Name:     p.Name,
-			Price:    p.Price,
-			Quantity: p.Quantity,
-		})
-	}
-
-	return result
-}
 
 // verifySignature validates the webhook signature using Prodamus algorithm
 // Documentation: https://help.prodamus.ru/payform/integracii/rest-api/instrukcii-dlya-samostoyatelnaya-integracii-servisov#kak-prinyat-uvedomlenie-ob-uspeshnoi-oplate
@@ -260,7 +245,9 @@ func (h *Handler) handleInviteLinkGeneration(userID string, userData *services.U
 	userData.InviteLink = inviteLink
 
 	if h.sendInviteMessage != nil {
+		h.wg.Add(1)
 		go func() {
+			defer h.wg.Done()
 			defer func() {
 				if r := recover(); r != nil {
 					log.Printf("Panic in sendInviteMessage for user %s: %v", userID, r)
@@ -289,4 +276,9 @@ func (h *Handler) generateInviteLink(userID string) (string, error) {
 	}
 
 	return inviteLink, nil
+}
+
+// Shutdown waits for all pending invite messages to be sent before returning
+func (h *Handler) Shutdown() {
+	h.wg.Wait()
 }

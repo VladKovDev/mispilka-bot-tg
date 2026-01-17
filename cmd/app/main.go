@@ -24,7 +24,7 @@ func main() {
 		log.Fatalf("Failed to create bot API: %v", err)
 	}
 
-	tgAPI.Debug = true
+	tgAPI.Debug = os.Getenv("BOT_DEBUG") == "true"
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

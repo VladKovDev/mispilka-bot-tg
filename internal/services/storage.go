@@ -61,19 +61,24 @@ func WriteJSONRetry[T any](path string, data T, attempts int) error {
 
 func CheckStorage(path string) error {
 	_, err := os.Stat(path)
-	if err != nil || os.IsNotExist(err) {
-		_, err = os.Create(path)
-		if err == nil {
-			log.Printf("create file: %v", path)
-		}
-		v := struct{}{}
-		if err := WriteJSON(path, v); err != nil {
-			return err
+	if err != nil {
+		if os.IsNotExist(err) {
+			// File doesn't exist, create it
+			_, err = os.Create(path)
+			if err != nil {
+				return fmt.Errorf("failed to create file %q: %w", path, err)
+			}
+			log.Printf("created file: %v", path)
+
+			// Initialize with empty struct
+			v := struct{}{}
+			if err := WriteJSON(path, v); err != nil {
+				return fmt.Errorf("failed to initialize file %q: %w", path, err)
+			}
+		} else {
+			// Some other error occurred
+			return fmt.Errorf("failed to stat file %q: %w", path, err)
 		}
 	}
 	return nil
-
-	// if _, err := ReadJSONRetry[any](path, 3); err != nil{
-	// 	panic(err)
-	// }
 }

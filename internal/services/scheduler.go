@@ -58,24 +58,6 @@ func SetSchedule(sendTime time.Time, userID string, sendMessage func(string)) {
 	})
 }
 
-func getDate(chatID string) (time.Time, error) {
-	var date time.Time
-	tasks, err := getScheduleBackup()
-	if err != nil {
-		return date, err
-	}
-	dateStr, ok := tasks[chatID]
-	if ok {
-		date, err := time.Parse(time.RFC3339, dateStr)
-		if err != nil {
-			return date, err
-		}
-		return date, nil
-	} else {
-		return time.Now(), nil
-	}
-}
-
 func SetNextSchedule(chatID string, messageName string, sendMessage func(string)) error {
 	timing, err := GetTiming(messageName)
 	if err != nil {

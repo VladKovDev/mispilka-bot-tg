@@ -162,7 +162,7 @@ func GetTiming(messageName string) (Timing, error) {
 func GetURLButton(messageName string) (string, string, error) {
 	messageData, err := getMessageData(messageName)
 	if err != nil {
-		return "", "", fmt.Errorf("не удалось получить данные сообщения для %s: %w", messageName, err)
+		return "", "", fmt.Errorf("failed to get message data for %s: %w", messageName, err)
 	}
 
 	// Проверить формат инлайн-клавиатуры на наличие кнопок-ссылок
@@ -176,7 +176,7 @@ func GetURLButton(messageName string) (string, string, error) {
 		}
 	}
 
-	return "", "", fmt.Errorf("конфигурация кнопки-ссылки не найдена для сообщения: %s", messageName)
+	return "", "", fmt.Errorf("URL button configuration not found for message: %s", messageName)
 }
 
 // GetInlineKeyboard возвращает конфигурацию инлайн-клавиатуры для заданного сообщения.
@@ -184,7 +184,7 @@ func GetURLButton(messageName string) (string, string, error) {
 func GetInlineKeyboard(messageName string) (*InlineKeyboardConfig, error) {
 	messageData, err := getMessageData(messageName)
 	if err != nil {
-		return nil, fmt.Errorf("не удалось получить данные сообщения для %s: %w", messageName, err)
+		return nil, fmt.Errorf("failed to get message data for %s: %w", messageName, err)
 	}
 
 	// Вернуть инлайн-клавиатуру, если она настроена
@@ -229,7 +229,7 @@ func ToTelegramKeyboard(config *InlineKeyboardConfig) tgbotapi.InlineKeyboardMar
 func LastMessage(messagesList MessagesList) (string, error) {
 	n := len(messagesList)
 	if n == 0 {
-		return "", fmt.Errorf("messagesList пуст")
+		return "", fmt.Errorf("messagesList is empty")
 	}
 	last := messagesList[n-1]
 	return last, nil
@@ -240,7 +240,7 @@ func GetPhoto(messageName string) (string, error) {
 
 	_, err := os.Stat(path)
 	if err != nil {
-		return "", fmt.Errorf("не удалось получить фото: %w", err)
+		return "", fmt.Errorf("failed to get photo: %w", err)
 	}
 	return path, nil
 }
