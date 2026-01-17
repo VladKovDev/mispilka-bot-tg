@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -10,6 +12,7 @@ import (
 type Config struct {
 	BotToken                   string
 	PrivateGroupID             string
+	AdminIDs                   []int64
 	WebhookHost                string
 	WebhookPort                string
 	WebhookPath                string
@@ -29,6 +32,7 @@ func Load() *Config {
 	return &Config{
 		BotToken:                   getEnv("BOT_TOKEN", ""),
 		PrivateGroupID:             getEnv("PRIVATE_GROUP_ID", ""),
+		AdminIDs:                   parseAdminIDs(getEnv("ADMIN_IDS", "")),
 		WebhookHost:                getEnv("WEBHOOK_HOST", "0.0.0.0"),
 		WebhookPort:                getEnv("WEBHOOK_PORT", "8080"),
 		WebhookPath:                getEnv("WEBHOOK_PATH", "/webhook/prodamus"),
@@ -59,4 +63,27 @@ func Validate(cfg *Config) error {
 		return fmt.Errorf("PRODAMUS_API_URL is required")
 	}
 	return nil
+}
+
+// parseAdminIDs parses comma-separated admin IDs from env string
+func parseAdminIDs(s string) []int64 {
+	if s == "" {
+		return []int64{}
+	}
+
+	parts := strings.Split(s, ",")
+	var ids []int64
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		id, err := strconv.ParseInt(part, 10, 64)
+		if err != nil {
+			fmt.Printf("Warning: invalid admin ID '%s': %v\n", part, err)
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return ids
 }

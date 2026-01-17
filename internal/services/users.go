@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"log"
 	"mispilkabot/internal/models"
 	"strconv"
 	"time"
@@ -195,47 +194,6 @@ func (u *User) GetJoinedAt() time.Time {
 	return *u.JoinedAt
 }
 
-// migrateUserData cleans up zero-time pointer fields for users who have them.
-// This function should be called once to fix users who were created before
-// proper pointer field handling was implemented.
-// Returns the number of users migrated and any error encountered.
-func migrateUserData() (int, error) {
-	users, err := ReadJSONRetry[UserMap]("data/users.json", 3)
-	if err != nil {
-		return 0, fmt.Errorf("failed to read users data: %w", err)
-	}
-
-	count := 0
-	for chatID, user := range users {
-		modified := false
-
-		// If PaymentDate is set to zero time, clear it (set to nil)
-		if user.PaymentDate != nil && user.PaymentDate.IsZero() {
-			user.PaymentDate = nil
-			modified = true
-		}
-
-		// If JoinedAt is set to zero time, clear it (set to nil)
-		if user.JoinedAt != nil && user.JoinedAt.IsZero() {
-			user.JoinedAt = nil
-			modified = true
-		}
-
-		if modified {
-			users[chatID] = user
-			count++
-		}
-	}
-
-	if count > 0 {
-		if err := WriteJSONRetry("data/users.json", users, 3); err != nil {
-			return count, fmt.Errorf("failed to write migrated users data: %w", err)
-		}
-		log.Printf("Migrated %d users (cleaned up zero-time pointer fields)", count)
-	}
-
-	return count, nil
-}
 
 // IsNewUser checks if a user with the given chat ID exists in the system.
 // Returns true if the user doesn't exist (is new), false if they exist.
@@ -247,4 +205,14 @@ func IsNewUser(chatID string) (bool, error) {
 	}
 	_, ok := users[chatID]
 	return !ok, nil
+}
+
+// GetAllUsers returns all users from the users.json file.
+// Returns an error if the user data cannot be read.
+func GetAllUsers() (UserMap, error) {
+	users, err := ReadJSONRetry[UserMap]("data/users.json", 3)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load users: %w", err)
+	}
+	return users, nil
 }
