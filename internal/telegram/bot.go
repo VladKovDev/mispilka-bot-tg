@@ -398,14 +398,15 @@ func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateCh
 			user.JoinedGroup = false
 			user.JoinedAt = nil
 
-			// For paid users, generate new invite link and send it to them
-			if user.HasPaid() {
+			// Only for users who left voluntarily (not kicked/banned)
+			// Generate new invite link for paid users who left on their own
+			if newStatus == "left" && user.HasPaid() {
 				newInviteLink, err := b.GenerateInviteLink(userID, b.cfg.PrivateGroupID)
 				if err != nil {
 					log.Printf("failed to generate new invite link for paid user %s: %v", userID, err)
 				} else {
 					user.InviteLink = newInviteLink
-					log.Printf("generated new invite link for paid user %s who left the group", userID)
+					log.Printf("generated new invite link for paid user %s who left the group voluntarily", userID)
 
 					// Send the new link to user in private message
 					parsedID, err := parseID(userID)
@@ -426,7 +427,7 @@ func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateCh
 			if err := services.ChangeUser(userID, user); err != nil {
 				log.Printf("failed to update user %s after leaving group: %v", userID, err)
 			} else {
-				log.Printf("user %s left the group, JoinedGroup reset to false", userID)
+				log.Printf("user %s left the group (status: %s), JoinedGroup reset to false", userID, newStatus)
 			}
 		}
 		return
