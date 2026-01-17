@@ -103,7 +103,9 @@ func (b *Bot) handleUpdates(ctx context.Context, updates tgbotapi.UpdatesChannel
 			if chatID == privateChatID {
 				if update.Message != nil && len(update.Message.NewChatMembers) > 0 {
 					for _, newUser := range update.Message.NewChatMembers {
-						services.ChangeIsMessaging(fmt.Sprint(newUser.ID), false)
+						if err := services.ChangeIsMessaging(fmt.Sprint(newUser.ID), false); err != nil {
+							log.Printf("Failed to update messaging status for user %d: %v", newUser.ID, err)
+						}
 					}
 				}
 				continue
@@ -371,56 +373,63 @@ func parseID(s string) (int64, error) {
 	return id, nil
 }
 
-// handleChatMember processes chat_member updates to track when users join the private group
+// handleChatMember processes chat_member updates to track when users join/leave the private group
 func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateChatID int64) {
 	// Only process updates for the private group
 	if chatMember.Chat.ID != privateChatID {
 		return
 	}
 
-	// Extract invite link used to join
-	if chatMember.InviteLink == nil {
-		return
-	}
-
-	inviteLink := chatMember.InviteLink.InviteLink
 	userID := fmt.Sprint(chatMember.NewChatMember.User.ID)
 
-	// Get user and check if invite link matches
+	// Get user data
 	user, err := services.GetUser(userID)
 	if err != nil {
-		log.Printf("user %s not found when processing group join: %v", userID, err)
+		log.Printf("user %s not found when processing group member update: %v", userID, err)
 		return
 	}
 
-	// Check if user used their stored invite link
-	if user.InviteLink != inviteLink {
-		// User joined with a different link - revoke the stored invite link for security
-		if err := b.RevokeInviteLink(fmt.Sprint(privateChatID), user.InviteLink); err != nil {
-			log.Printf("failed to revoke stored invite link for user %s who joined with different link: %v", userID, err)
-		} else {
-			log.Printf("revoked stored invite link for user %s who joined with different link", userID)
+	newStatus := chatMember.NewChatMember.Status
+	oldStatus := chatMember.OldChatMember.Status
+
+	// Handle user leaving the group (left, kicked, or banned)
+	if newStatus == "left" || newStatus == "kicked" || newStatus == "banned" {
+		if user.JoinedGroup {
+			user.JoinedGroup = false
+			user.JoinedAt = nil
+			if err := services.ChangeUser(userID, user); err != nil {
+				log.Printf("failed to reset JoinedGroup for user %s: %v", userID, err)
+			} else {
+				log.Printf("user %s left the group, JoinedGroup reset to false", userID)
+			}
 		}
 		return
 	}
 
-	// User joined with their stored invite link
-	if !user.JoinedGroup {
-		user.JoinedGroup = true
-		joinedAt := time.Now()
-		user.JoinedAt = &joinedAt
-		if err := services.ChangeUser(userID, user); err != nil {
-			log.Printf("failed to update JoinedGroup for user %s: %v", userID, err)
-		} else {
-			log.Printf("user %s joined private group, JoinedGroup set to true", userID)
-		}
-	}
+	// Handle user joining the group (member, administrator, or creator)
+	if newStatus == "member" || newStatus == "administrator" || newStatus == "creator" {
+		// Check if this is a new join (was not member before)
+		if oldStatus == "left" || oldStatus == "kicked" {
+			// User was previously not a member, now joining
+			inviteLink := ""
+			if chatMember.InviteLink != nil {
+				inviteLink = chatMember.InviteLink.InviteLink
+			}
 
-	// Revoke the invite link (log only if fails, don't propagate error)
-	if err := b.RevokeInviteLink(fmt.Sprint(privateChatID), inviteLink); err != nil {
-		log.Printf("failed to revoke invite link for user %s: %v", userID, err)
-	} else {
-		log.Printf("invite link revoked for user %s", userID)
+			// Allow re-join if user has paid (with any invite link) or if link matches stored one
+			validJoin := user.HasPaid() || (inviteLink != "" && user.InviteLink == inviteLink)
+
+			if validJoin && !user.JoinedGroup {
+				user.JoinedGroup = true
+				joinedAt := time.Now()
+				user.JoinedAt = &joinedAt
+				if err := services.ChangeUser(userID, user); err != nil {
+					log.Printf("failed to update JoinedGroup for user %s: %v", userID, err)
+				} else {
+					log.Printf("user %s joined private group, JoinedGroup set to true (paid: %v)", userID, user.HasPaid())
+				}
+			}
+		}
 	}
 }
 
