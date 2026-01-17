@@ -192,7 +192,7 @@ func (b *Bot) formatUser(entry userEntry, index int) string {
 	if user.HasJoined() {
 		sb.WriteString(fmt.Sprintf("👥 Группа: ✅ Вступил %s\n", user.GetJoinedAt().Format("02.01.2006 15:04")))
 		if user.InviteLink != "" {
-			sb.WriteString(fmt.Sprintf("   Инвайт-ссылка использована\n"))
+			sb.WriteString("   Инвайт-ссылка использована\n")
 		}
 	} else {
 		sb.WriteString("👥 Группа: ❌ Не вступил\n")
