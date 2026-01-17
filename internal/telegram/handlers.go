@@ -185,11 +185,11 @@ func (b *Bot) formatUser(entry userEntry, index int) string {
 	}
 	sb.WriteString("\n")
 
-	// 5. Total paid amount
-	if user.TotalPaid != "" {
-		sb.WriteString(fmt.Sprintf("Всего оплачено: %s ₽\n", user.TotalPaid))
+	// 5. Total paid amount (from payment info)
+	if user.PaymentInfo != nil && user.PaymentInfo.Sum != "" {
+		sb.WriteString(fmt.Sprintf("Сумма оплаты: %s ₽\n", user.PaymentInfo.Sum))
 	} else {
-		sb.WriteString("Всего оплачено: 0.00 ₽\n")
+		sb.WriteString("Сумма оплаты: не оплачено\n")
 	}
 
 	// 6. Payment info (date, link)

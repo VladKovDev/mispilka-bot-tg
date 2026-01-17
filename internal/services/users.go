@@ -20,7 +20,6 @@ type User struct {
 	JoinedGroup  bool                   `json:"joined_group,omitempty"`
 	JoinedAt     *time.Time             `json:"joined_at,omitempty"`
 	PaymentInfo  *models.WebhookPayload `json:"payment_info,omitempty"` // full webhook payload
-	TotalPaid    string                 `json:"total_paid,omitempty"`   // accumulated total payment amount across all payments
 }
 
 type UserMap map[string]User
