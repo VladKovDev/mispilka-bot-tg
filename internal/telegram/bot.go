@@ -100,12 +100,23 @@ func (b *Bot) handleUpdates(ctx context.Context, updates tgbotapi.UpdatesChannel
 			}
 
 			chatID := update.FromChat().ID
-			if chatID == privateChatID {
-				if update.Message != nil && len(update.Message.NewChatMembers) > 0 {
-					for _, newUser := range update.Message.NewChatMembers {
-						if err := services.ChangeIsMessaging(fmt.Sprint(newUser.ID), false); err != nil {
-							log.Printf("Failed to update messaging status for user %d: %v", newUser.ID, err)
+			if chatID == privateChatID && update.Message != nil {
+				// Handle new chat members (users joining the group)
+				if len(update.Message.NewChatMembers) > 0 {
+					for _, newMember := range update.Message.NewChatMembers {
+						// Skip bots
+						if newMember.IsBot {
+							continue
 						}
+						b.handleNewChatMemberMessage(&newMember, update.Message, privateChatID)
+					}
+				}
+				// Handle left chat member (user leaving the group)
+				if update.Message.LeftChatMember != nil {
+					leftMember := update.Message.LeftChatMember
+					// Skip bots
+					if !leftMember.IsBot {
+						b.handleLeftChatMemberMessage(leftMember, update.Message, privateChatID)
 					}
 				}
 				continue
@@ -523,6 +534,123 @@ func (b *Bot) handleMyChatMember(chatMember *tgbotapi.ChatMemberUpdated, private
 		chatMember.Chat.ID,
 		chatMember.OldChatMember.Status,
 		chatMember.NewChatMember.Status)
+}
+
+// handleNewChatMemberMessage processes new_chat_members message events (users joining via message)
+// This is called when the bot receives a message with new_chat_members in the private group
+func (b *Bot) handleNewChatMemberMessage(newMember *tgbotapi.User, message *tgbotapi.Message, privateChatID int64) {
+	userID := fmt.Sprint(newMember.ID)
+
+	log.Printf("[JOIN_MSG] User %s (%s) joined group via message event", userID, newMember.UserName)
+
+	// Get user data
+	user, err := services.GetUser(userID)
+	if err != nil {
+		log.Printf("[JOIN_MSG] User %s not found in database - they need to start a chat with the bot first", userID)
+		return
+	}
+
+	// Update JoinedGroup status
+	user.JoinedGroup = true
+	joinedAt := time.Now()
+	user.JoinedAt = &joinedAt
+
+	// Log details for debugging
+	paymentDate := "nil"
+	if user.PaymentDate != nil {
+		paymentDate = user.PaymentDate.Format(time.RFC3339)
+	}
+
+	log.Printf("[JOIN_MSG] User %s joining: hasPaid=%v (PaymentDate=%s), storedInviteLink=%q",
+		userID, user.HasPaid(), paymentDate, user.InviteLink)
+
+	// Save updated user data
+	if err := services.ChangeUser(userID, user); err != nil {
+		log.Printf("[JOIN_MSG] Failed to update JoinedGroup for user %s: %v", userID, err)
+	} else {
+		log.Printf("[JOIN_MSG] User %s joined private group successfully, JoinedGroup set to true", userID)
+	}
+
+	// Revoke the user's stored invite link for security (one-time use)
+	if user.InviteLink != "" {
+		if err := b.RevokeInviteLink(b.cfg.PrivateGroupID, user.InviteLink); err != nil {
+			log.Printf("[JOIN_MSG] Failed to revoke invite link for user %s: %v", userID, err)
+		} else {
+			log.Printf("[JOIN_MSG] Invite link revoked for user %s: %s", userID, user.InviteLink)
+			// Clear the invite link after revoking
+			user.InviteLink = ""
+			services.ChangeUser(userID, user)
+		}
+	}
+}
+
+// handleLeftChatMemberMessage processes left_chat_member message events (user leaving via message)
+// This is called when the bot receives a message with left_chat_member in the private group
+func (b *Bot) handleLeftChatMemberMessage(leftMember *tgbotapi.User, message *tgbotapi.Message, privateChatID int64) {
+	userID := fmt.Sprint(leftMember.ID)
+
+	// Determine if user left voluntarily or was kicked
+	// In message events, we check if the 'from' field matches the left member
+	fromID := fmt.Sprint(message.From.ID)
+	leftVoluntarily := (fromID == userID)
+
+	log.Printf("[LEAVE_MSG] User %s left group via message event: fromID=%s, leftVoluntarily=%v", userID, fromID, leftVoluntarily)
+
+	// Get user data
+	user, err := services.GetUser(userID)
+	if err != nil {
+		log.Printf("[LEAVE_MSG] User %s not found in database, cannot update leave status", userID)
+		return
+	}
+
+	log.Printf("[LEAVE_MSG] User %s details: JoinedGroup=%v, HasPaid=%v, InviteLink=%s",
+		userID, user.JoinedGroup, user.HasPaid(), user.InviteLink)
+
+	if !user.JoinedGroup {
+		log.Printf("[LEAVE_MSG] User %s was not marked as joined, skipping", userID)
+		return
+	}
+
+	// Update JoinedGroup status
+	user.JoinedGroup = false
+	user.JoinedAt = nil
+
+	// If user left voluntarily and has paid, generate new invite link
+	if leftVoluntarily && user.HasPaid() {
+		log.Printf("[LEAVE_MSG] Processing voluntary leave for paid user %s", userID)
+		newInviteLink, err := b.GenerateInviteLink(userID, b.cfg.PrivateGroupID)
+		if err != nil {
+			log.Printf("[LEAVE_MSG] Failed to generate new invite link for paid user %s: %v", userID, err)
+		} else {
+			user.InviteLink = newInviteLink
+			log.Printf("[LEAVE_MSG] Generated new invite link for paid user %s who left voluntarily: %s", userID, newInviteLink)
+
+			// Send the new link to user in private message with "ВОТ ВАША НОВАЯ ССЫЛКА" message
+			parsedID, err := parseID(userID)
+			if err != nil {
+				log.Printf("[LEAVE_MSG] Failed to parse userID %s: %v", userID, err)
+			} else {
+				msg := tgbotapi.NewMessage(parsedID, fmt.Sprintf("Вы вышли из группы. ВОТ ВАША НОВАЯ ССЫЛКА:\n%s", newInviteLink))
+				msg.DisableWebPagePreview = true
+				if _, err := b.bot.Send(msg); err != nil {
+					log.Printf("[LEAVE_MSG] Failed to send new invite link to user %s: %v", userID, err)
+				} else {
+					log.Printf("[LEAVE_MSG] Successfully sent new invite link to paid user %s", userID)
+				}
+			}
+		}
+	} else if !leftVoluntarily {
+		log.Printf("[LEAVE_MSG] User %s was kicked/banned, not sending new link", userID)
+	} else if !user.HasPaid() {
+		log.Printf("[LEAVE_MSG] User %s left but hasn't paid, not sending new link", userID)
+	}
+
+	// Save updated user data
+	if err := services.ChangeUser(userID, user); err != nil {
+		log.Printf("[LEAVE_MSG] Failed to update user %s after leaving group: %v", userID, err)
+	} else {
+		log.Printf("[LEAVE_MSG] User %s left the group (voluntarily: %v), JoinedGroup reset to false", userID, leftVoluntarily)
+	}
 }
 
 // usersPaginationCallback handles pagination button clicks for users list
