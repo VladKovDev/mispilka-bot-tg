@@ -491,27 +491,26 @@ func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateCh
 			log.Printf("[JOIN] user %s joining: hasPaid=%v (PaymentDate=%s), inviteLinkMatches=%v (inviteLink=%q, stored=%q), validJoin=%v",
 				userID, hasPaid, paymentDate, inviteLinkMatches, inviteLink, user.InviteLink, validJoin)
 
-			if validJoin {
-				user.JoinedGroup = true
-				joinedAt := time.Now()
-				user.JoinedAt = &joinedAt
-				if err := services.ChangeUser(userID, user); err != nil {
-					log.Printf("[JOIN] failed to update JoinedGroup for user %s: %v", userID, err)
-				} else {
-					log.Printf("[JOIN] user %s joined private group successfully, JoinedGroup set to true (paid: %v)", userID, user.HasPaid())
-				}
-
-				// Revoke the invite link for security (one-time use)
-				if inviteLink != "" {
-					if err := b.RevokeInviteLink(b.cfg.PrivateGroupID, inviteLink); err != nil {
-						log.Printf("[JOIN] failed to revoke invite link for user %s: %v", userID, err)
-					} else {
-						log.Printf("[JOIN] invite link revoked for user %s", userID)
-					}
-				}
+			// TEMPORARY DEBUG: Always update status regardless of validJoin
+			// This helps diagnose if the issue is with validation or with persistence
+			user.JoinedGroup = true
+			joinedAt := time.Now()
+			user.JoinedAt = &joinedAt
+			if err := services.ChangeUser(userID, user); err != nil {
+				log.Printf("[JOIN] failed to update JoinedGroup for user %s: %v", userID, err)
 			} else {
-				log.Printf("[JOIN] user %s tried to join but validation failed: paid=%v, inviteLink=%q, storedLink=%q, inviteMatch=%v",
-					userID, user.HasPaid(), inviteLink, user.InviteLink, user.InviteLink == inviteLink)
+				log.Printf("[JOIN] user %s joined private group successfully, JoinedGroup set to true (paid: %v)", userID, user.HasPaid())
+			}
+
+			// Revoke the invite link for security (one-time use) - only if it's the user's stored link
+			if inviteLink != "" && inviteLink == user.InviteLink {
+				if err := b.RevokeInviteLink(b.cfg.PrivateGroupID, inviteLink); err != nil {
+					log.Printf("[JOIN] failed to revoke invite link for user %s: %v", userID, err)
+				} else {
+					log.Printf("[JOIN] invite link revoked for user %s", userID)
+				}
+			} else if inviteLink != "" {
+				log.Printf("[JOIN] invite link %q does not match stored link %q, not revoking", inviteLink, user.InviteLink)
 			}
 		}
 	}
