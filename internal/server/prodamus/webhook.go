@@ -212,15 +212,27 @@ func (h *Handler) processPayment(userID string, payload *models.WebhookPayload) 
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	log.Printf("[WEBHOOK] Processing payment for user %s (order_id: %s)", userID, payload.OrderID)
+
 	userData, err := services.GetUser(userID)
 	if err != nil {
 		return fmt.Errorf("user not found: %w", err)
 	}
 
+	// Log current state before update
+	oldPaymentDate := "nil"
+	if userData.PaymentDate != nil {
+		oldPaymentDate = userData.PaymentDate.Format(time.RFC3339)
+	}
+	log.Printf("[WEBHOOK] User %s current state: PaymentDate=%s, InviteLink=%q, JoinedGroup=%v",
+		userID, oldPaymentDate, userData.InviteLink, userData.JoinedGroup)
+
 	now := time.Now()
 	userData.PaymentDate = &now
 	userData.IsMessaging = false
 	userData.PaymentInfo = payload
+
+	log.Printf("[WEBHOOK] User %s: set PaymentDate to %s", userID, now.Format(time.RFC3339))
 
 	// Generate and send invite link for the paid user
 	if err := h.handleInviteLinkGeneration(userID, &userData); err != nil {
@@ -230,6 +242,9 @@ func (h *Handler) processPayment(userID string, payload *models.WebhookPayload) 
 	if err := services.ChangeUser(userID, userData); err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
 	}
+
+	log.Printf("[WEBHOOK] User %s saved successfully: PaymentDate=%s, InviteLink=%q, JoinedGroup=%v",
+		userID, userData.PaymentDate.Format(time.RFC3339), userData.InviteLink, userData.JoinedGroup)
 
 	return nil
 }
