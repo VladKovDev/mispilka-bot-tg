@@ -117,6 +117,9 @@
         ]
       }
     },
+    "group_leave_new_link": {
+      "template_file": "group_leave_new_link.md"
+    },
     "start": {
       "template_file": "start.md"
     }

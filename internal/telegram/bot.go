@@ -625,12 +625,24 @@ func (b *Bot) handleLeftChatMemberMessage(leftMember *tgbotapi.User, message *tg
 			user.InviteLink = newInviteLink
 			log.Printf("[LEAVE_MSG] Generated new invite link for paid user %s who left voluntarily: %s", userID, newInviteLink)
 
-			// Send the new link to user in private message with "ВОТ ВАША НОВАЯ ССЫЛКА" message
+			// Send the new link to user in private message using template
 			parsedID, err := parseID(userID)
 			if err != nil {
 				log.Printf("[LEAVE_MSG] Failed to parse userID %s: %v", userID, err)
 			} else {
-				msg := tgbotapi.NewMessage(parsedID, fmt.Sprintf("Вы вышли из группы. ВОТ ВАША НОВАЯ ССЫЛКА:\n%s", newInviteLink))
+				// Get message template
+				text, err := services.GetMessageText("group_leave_new_link")
+				if err != nil {
+					log.Printf("[LEAVE_MSG] Failed to get message template: %v", err)
+					// Fallback to hardcoded message
+					text = fmt.Sprintf("Вы вышли из группы. ВОТ ВАША НОВАЯ ССЫЛКА:\n%s", newInviteLink)
+				} else {
+					// Replace {{invite_link}} placeholder
+					values := map[string]string{"invite_link": newInviteLink}
+					text = services.ReplaceAllPlaceholders(text, values)
+				}
+
+				msg := tgbotapi.NewMessage(parsedID, text)
 				msg.DisableWebPagePreview = true
 				if _, err := b.bot.Send(msg); err != nil {
 					log.Printf("[LEAVE_MSG] Failed to send new invite link to user %s: %v", userID, err)
