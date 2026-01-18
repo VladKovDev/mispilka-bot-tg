@@ -28,5 +28,8 @@ func SetDefaultConfig() *Config {
 			MaxAge:       0,
 			Compress:     false,
 		},
+		Crypto: CryptoConfig{
+			Algorithm: "aes_gcm",
+		},
 	}
 }

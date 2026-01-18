@@ -2,9 +2,13 @@ package config
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +19,13 @@ type Config struct {
 	Env      string `yaml:"env"`
 	Database DatabaseConfig
 	Logger   LoggerConfig
+	Crypto   CryptoConfig
+}
+
+type CryptoConfig struct {
+	Keys           map[int][]byte
+	CurrentVersion int    `mapstructure:"current_key_version"`
+	Algorithm      string `mapstructure:"crypto_algorithm"`
 }
 
 type DatabaseConfig struct {
@@ -101,6 +112,16 @@ func (l *viperLoader) Load(ctx context.Context) (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
+	keys, err := loadCryptoKeys(v)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load crypto keys: %w", err)
+	}
+	cfg.Crypto.Keys = keys
+
+	if cfg.Crypto.CurrentVersion == 0 {
+		cfg.Crypto.CurrentVersion = getLastCryptoKeyVersion(keys)
+	}
+
 	if err := l.validator.Validate(cfg); err != nil {
 		return nil, fmt.Errorf("config failed validation: %w", err)
 	}
@@ -131,6 +152,60 @@ func (l *viperLoader) BindEnvVariables(v *viper.Viper) {
 	_ = v.BindEnv("logger.conn_max_lifetime")
 	_ = v.BindEnv("logger.conn_max_idle_time")
 	_ = v.BindEnv("logger.health_check_period")
+	// Crypto
+	_ = v.BindEnv("crypto.current_key_version")
+	_ = v.BindEnv("crypto.crypto_algorithm")
+}
+
+func loadCryptoKeys(v *viper.Viper) (map[int][]byte, error) {
+	// Look for environment variables with pattern PROMO_BOTS_TOKEN_ENCRYPTION_KEY_V{N}
+	// and parse each base64 value into a key bytes slice.
+	re := regexp.MustCompile(`^PROMO_BOTS_TOKEN_ENCRYPTION_KEY(?:_V(\d+))?$`)
+
+	result := make(map[int][]byte)
+
+	for _, e := range os.Environ() {
+		// e is like "KEY=VALUE"
+		parts := strings.SplitN(e, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		name := parts[0]
+		val := parts[1]
+
+		m := re.FindStringSubmatch(name)
+		if m == nil {
+			continue
+		}
+
+		ver := 1
+		if m[1] != "" {
+			n, err := strconv.Atoi(m[1])
+			if err != nil {
+				return nil, fmt.Errorf("invalid key version in env var %s: %w", name, err)
+			}
+			ver = n
+		}
+
+		decoded, err := base64.StdEncoding.DecodeString(val)
+		if err != nil {
+			return nil, fmt.Errorf("invalid base64 for %s: %w", name, err)
+		}
+
+		result[ver] = decoded
+	}
+
+	return result, nil
+}
+
+func getLastCryptoKeyVersion(keys map[int][]byte) int {
+	maxVer := 0
+	for ver := range keys {
+		if ver > maxVer {
+			maxVer = ver
+		}
+	}
+	return maxVer
 }
 
 func Load(configPath string, ctx context.Context) (*Config, error) {

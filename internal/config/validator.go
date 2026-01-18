@@ -24,6 +24,10 @@ func (v validator) Validate(cfg *Config) error {
 		return fmt.Errorf("logger config: %w", err)
 	}
 
+	if err := v.validateCrypto(cfg.Crypto); err != nil {
+		return fmt.Errorf("crypto config: %w", err)
+	}
+
 	return nil
 }
 
@@ -114,6 +118,27 @@ func (v validator) validateLogger(logger LoggerConfig) error {
 
 	if logger.MaxAge < 0 {
 		return fmt.Errorf("logger max age must be non-negative, got: %v", logger.MaxAge)
+	}
+
+	return nil
+}
+
+func (v validator) validateCrypto(crypto CryptoConfig) error {
+	if crypto.Keys == nil {
+		return fmt.Errorf("crypto keys is required")
+	}
+
+	for ver, key := range crypto.Keys {
+		if len(key) != 32 {
+			return fmt.Errorf("crypto key for version %d must be 32 bytes long, got: %d", ver, len(key))
+		}
+	}
+
+	validAlgorithms := map[string]bool{
+		"aes_gcm": true,
+	}
+	if !validAlgorithms[crypto.Algorithm] {
+		return fmt.Errorf("crypto algorithm must be (aes_gcm), got: %v", crypto.Algorithm)
 	}
 
 	return nil
