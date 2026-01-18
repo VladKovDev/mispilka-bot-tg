@@ -478,10 +478,18 @@ func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateCh
 			}
 
 			// Allow join if user has paid (with any invite link) or if link matches stored one
-			validJoin := user.HasPaid() || (inviteLink != "" && user.InviteLink == inviteLink)
+			hasPaid := user.HasPaid()
+			inviteLinkMatches := inviteLink != "" && user.InviteLink == inviteLink
+			validJoin := hasPaid || inviteLinkMatches
 
-			log.Printf("[JOIN] user %s joining group: paid=%v, inviteLink=%q, storedLink=%q, validJoin=%v",
-				userID, user.HasPaid(), inviteLink, user.InviteLink, validJoin)
+			// Detailed logging for debugging
+			paymentDate := "nil"
+			if user.PaymentDate != nil {
+				paymentDate = user.PaymentDate.Format(time.RFC3339)
+			}
+
+			log.Printf("[JOIN] user %s joining: hasPaid=%v (PaymentDate=%s), inviteLinkMatches=%v (inviteLink=%q, stored=%q), validJoin=%v",
+				userID, hasPaid, paymentDate, inviteLinkMatches, inviteLink, user.InviteLink, validJoin)
 
 			if validJoin {
 				user.JoinedGroup = true
