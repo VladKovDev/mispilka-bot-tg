@@ -14,13 +14,15 @@ Deep analysis and problem solving mode
    - Set context for deep, systematic reasoning
    - Prepare to explore the problem space comprehensively
 
-2. **Parse the Problem or Question**
+2. **Use sequential think mcp**
+
+3. **Parse the Problem or Question**
    - Extract the core challenge from: $ARGUMENTS
    - Identify all stakeholders and constraints
    - Recognize implicit requirements and hidden complexities
    - Question assumptions and surface unknowns
 
-3. **Multi-Dimensional Analysis**
+4. **Multi-Dimensional Analysis**
    Approach the problem from multiple angles:
    
    ### Technical Perspective
@@ -47,7 +49,7 @@ Deep analysis and problem solving mode
    - Evaluate dependencies and coupling
    - Think about emergent behaviors
 
-4. **Generate Multiple Solutions**
+5. **Generate Multiple Solutions**
    - Brainstorm at least 3-5 different approaches
    - For each approach, consider:
      - Pros and cons
@@ -58,7 +60,7 @@ Deep analysis and problem solving mode
    - Include both conventional and creative solutions
    - Consider hybrid approaches
 
-5. **Deep Dive Analysis**
+6. **Deep Dive Analysis**
    For the most promising solutions:
    - Create detailed implementation plans
    - Identify potential pitfalls and mitigation strategies
@@ -66,27 +68,27 @@ Deep analysis and problem solving mode
    - Analyze second and third-order effects
    - Think through failure modes and recovery
 
-6. **Cross-Domain Thinking**
+7. **Cross-Domain Thinking**
    - Draw parallels from other industries or domains
    - Apply design patterns from different contexts
    - Consider biological or natural system analogies
    - Look for innovative combinations of existing solutions
 
-7. **Challenge and Refine**
+8. **Challenge and Refine**
    - Play devil's advocate with each solution
    - Identify weaknesses and blind spots
    - Consider "what if" scenarios
    - Stress-test assumptions
    - Look for unintended consequences
 
-8. **Synthesize Insights**
+9. **Synthesize Insights**
    - Combine insights from all perspectives
    - Identify key decision factors
    - Highlight critical trade-offs
    - Summarize innovative discoveries
    - Present a nuanced view of the problem space
 
-9. **Provide Structured Recommendations**
+10. **Provide Structured Recommendations**
    Present findings in a clear structure:
    ```
    ## Problem Analysis
@@ -117,7 +119,7 @@ Deep analysis and problem solving mode
    - Areas for further research
    ```
 
-10. **Meta-Analysis**
+11. **Meta-Analysis**
     - Reflect on the thinking process itself
     - Identify areas of uncertainty
     - Acknowledge biases or limitations
