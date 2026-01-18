@@ -3,6 +3,7 @@
 .idea/
 *.log
 .env
+.env.local
 config/config.json
 .serena
 
@@ -11,3 +12,6 @@ data/*
 !data/README.md
 !data/example/
 !data/example/**
+
+# bv (beads viewer) local config and caches
+.bv/

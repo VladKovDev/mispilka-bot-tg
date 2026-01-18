@@ -382,20 +382,26 @@ func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateCh
 
 	userID := fmt.Sprint(chatMember.NewChatMember.User.ID)
 
-	// Get user data
+	// Get user data - if user doesn't exist, we'll still process the update
+	// but won't be able to track their status properly until they start a chat
 	user, err := services.GetUser(userID)
-	if err != nil {
-		log.Printf("user %s not found when processing group member update: %v", userID, err)
-		return
-	}
 
 	newStatus := chatMember.NewChatMember.Status
 	oldStatus := chatMember.OldChatMember.Status
 
 	// Handle user leaving the group (left, kicked, or banned)
 	if newStatus == "left" || newStatus == "kicked" || newStatus == "banned" {
-		log.Printf("user %s leaving group: oldStatus=%s, newStatus=%s, JoinedGroup=%v, HasPaid=%v",
-			userID, oldStatus, newStatus, user.JoinedGroup, user.HasPaid())
+		log.Printf("[LEAVE] user %s leaving group: oldStatus=%s, newStatus=%s, userExists=%v",
+			userID, oldStatus, newStatus, err == nil)
+
+		// If user doesn't exist in our database, we can't track them properly
+		if err != nil {
+			log.Printf("[LEAVE] user %s not found in database, cannot update leave status", userID)
+			return
+		}
+
+		log.Printf("[LEAVE] user %s details: JoinedGroup=%v, HasPaid=%v, InviteLink=%s",
+			userID, user.JoinedGroup, user.HasPaid(), user.InviteLink)
 
 		if user.JoinedGroup {
 			user.JoinedGroup = false
@@ -404,38 +410,38 @@ func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateCh
 			// Only for users who left voluntarily (not kicked/banned)
 			// Generate new invite link for paid users who left on their own
 			if newStatus == "left" && user.HasPaid() {
-				log.Printf("processing voluntary leave for paid user %s", userID)
+				log.Printf("[LEAVE] processing voluntary leave for paid user %s", userID)
 				newInviteLink, err := b.GenerateInviteLink(userID, b.cfg.PrivateGroupID)
 				if err != nil {
-					log.Printf("failed to generate new invite link for paid user %s: %v", userID, err)
+					log.Printf("[LEAVE] failed to generate new invite link for paid user %s: %v", userID, err)
 				} else {
 					user.InviteLink = newInviteLink
-					log.Printf("generated new invite link for paid user %s who left the group voluntarily", userID)
+					log.Printf("[LEAVE] generated new invite link for paid user %s who left the group voluntarily: %s", userID, newInviteLink)
 
 					// Send the new link to user in private message
 					parsedID, err := parseID(userID)
 					if err != nil {
-						log.Printf("failed to parse userID %s: %v", userID, err)
+						log.Printf("[LEAVE] failed to parse userID %s: %v", userID, err)
 					} else {
 						msg := tgbotapi.NewMessage(parsedID, fmt.Sprintf("Вы вышли из группы. Вот ваша новая ссылка для вступления:\n%s", newInviteLink))
 						msg.DisableWebPagePreview = true
 						if _, err := b.bot.Send(msg); err != nil {
-							log.Printf("failed to send new invite link to user %s: %v", userID, err)
+							log.Printf("[LEAVE] failed to send new invite link to user %s: %v", userID, err)
 						} else {
-							log.Printf("sent new invite link to paid user %s", userID)
+							log.Printf("[LEAVE] successfully sent new invite link to paid user %s", userID)
 						}
 					}
 				}
 			} else if newStatus != "left" {
-				log.Printf("user %s was kicked/banned (status: %s), not sending new link", userID, newStatus)
+				log.Printf("[LEAVE] user %s was kicked/banned (status: %s), not sending new link", userID, newStatus)
 			} else if !user.HasPaid() {
-				log.Printf("user %s left but hasn't paid, not sending new link", userID)
+				log.Printf("[LEAVE] user %s left but hasn't paid, not sending new link", userID)
 			}
 
 			if err := services.ChangeUser(userID, user); err != nil {
-				log.Printf("failed to update user %s after leaving group: %v", userID, err)
+				log.Printf("[LEAVE] failed to update user %s after leaving group: %v", userID, err)
 			} else {
-				log.Printf("user %s left the group (status: %s), JoinedGroup reset to false", userID, newStatus)
+				log.Printf("[LEAVE] user %s left the group (status: %s), JoinedGroup reset to false", userID, newStatus)
 			}
 		}
 		return
@@ -446,6 +452,9 @@ func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateCh
 		// Check if this is a new join (was not a member/admin/creator before)
 		wasNotMember := oldStatus != "member" && oldStatus != "administrator" && oldStatus != "creator"
 
+		log.Printf("[JOIN] user %s status change: oldStatus=%s, newStatus=%s, wasNotMember=%v, userExists=%v",
+			userID, oldStatus, newStatus, wasNotMember, err == nil)
+
 		if wasNotMember {
 			// User is joining the group (first time or re-joining)
 			inviteLink := ""
@@ -453,10 +462,25 @@ func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateCh
 				inviteLink = chatMember.InviteLink.InviteLink
 			}
 
+			// If user doesn't exist in database, we can't track them properly
+			// They need to start a chat with the bot first
+			if err != nil {
+				log.Printf("[JOIN] user %s not found in database - they need to start a chat with the bot first. inviteLink=%s", userID, inviteLink)
+				// Still revoke the invite link if present for security
+				if inviteLink != "" {
+					if err := b.RevokeInviteLink(b.cfg.PrivateGroupID, inviteLink); err != nil {
+						log.Printf("[JOIN] failed to revoke invite link for unknown user %s: %v", userID, err)
+					} else {
+						log.Printf("[JOIN] revoked invite link for unknown user %s", userID)
+					}
+				}
+				return
+			}
+
 			// Allow join if user has paid (with any invite link) or if link matches stored one
 			validJoin := user.HasPaid() || (inviteLink != "" && user.InviteLink == inviteLink)
 
-			log.Printf("user %s joining group: paid=%v, inviteLink=%s, storedLink=%s, validJoin=%v",
+			log.Printf("[JOIN] user %s joining group: paid=%v, inviteLink=%q, storedLink=%q, validJoin=%v",
 				userID, user.HasPaid(), inviteLink, user.InviteLink, validJoin)
 
 			if validJoin {
@@ -464,22 +488,22 @@ func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateCh
 				joinedAt := time.Now()
 				user.JoinedAt = &joinedAt
 				if err := services.ChangeUser(userID, user); err != nil {
-					log.Printf("failed to update JoinedGroup for user %s: %v", userID, err)
+					log.Printf("[JOIN] failed to update JoinedGroup for user %s: %v", userID, err)
 				} else {
-					log.Printf("user %s joined private group, JoinedGroup set to true (paid: %v)", userID, user.HasPaid())
+					log.Printf("[JOIN] user %s joined private group successfully, JoinedGroup set to true (paid: %v)", userID, user.HasPaid())
 				}
 
 				// Revoke the invite link for security (one-time use)
 				if inviteLink != "" {
 					if err := b.RevokeInviteLink(b.cfg.PrivateGroupID, inviteLink); err != nil {
-						log.Printf("failed to revoke invite link for user %s: %v", userID, err)
+						log.Printf("[JOIN] failed to revoke invite link for user %s: %v", userID, err)
 					} else {
-						log.Printf("invite link revoked for user %s", userID)
+						log.Printf("[JOIN] invite link revoked for user %s", userID)
 					}
 				}
 			} else {
-				log.Printf("user %s tried to join but validation failed: paid=%v, inviteMatch=%v",
-					userID, user.HasPaid(), inviteLink != "" && user.InviteLink == inviteLink)
+				log.Printf("[JOIN] user %s tried to join but validation failed: paid=%v, inviteLink=%q, storedLink=%q, inviteMatch=%v",
+					userID, user.HasPaid(), inviteLink, user.InviteLink, user.InviteLink == inviteLink)
 			}
 		}
 	}

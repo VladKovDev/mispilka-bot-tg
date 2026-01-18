@@ -1,0 +1,57 @@
+{
+  "phase": "bug-fixing",
+  "timestamp": "2026-01-18T00:00:00.000Z",
+  "priority": "MEDIUM",
+  "files_modified": [
+    {
+      "path": "internal/services/invite.go",
+      "backup": ".tmp/current/backups/.rollback/internal-services-invite.go.backup",
+      "timestamp": "2026-01-17T12:05:00.000Z",
+      "bug_id": "MEDIUM-1",
+      "reason": "Fix code formatting with gofmt"
+    },
+    {
+      "path": "internal/services/storage.go",
+      "backup": ".tmp/current/backups/.rollback/internal-services-storage.go.backup",
+      "timestamp": "2026-01-17T12:10:00.000Z",
+      "bug_id": "MEDIUM-2, MEDIUM-6, MEDIUM-7",
+      "reason": "Fix error handling in CheckStorage, remove commented code, fix redundant logic condition"
+    },
+    {
+      "path": "internal/telegram/bot.go",
+      "backup": ".tmp/current/backups/.rollback/internal-telegram-bot.go.backup",
+      "timestamp": "2026-01-17T12:15:00.000Z",
+      "bug_id": "MEDIUM-3, MEDIUM-4, MEDIUM-5",
+      "reason": "Handle SetSchedules error as fatal, fix parseID to return error, add error logging in sendMessage"
+    },
+    {
+      "path": "internal/telegram/handlers.go",
+      "backup": ".tmp/current/backups/.rollback/internal-telegram-handlers.go.backup",
+      "timestamp": "2026-01-17T12:20:00.000Z",
+      "bug_id": "MEDIUM-4",
+      "reason": "Update parseID call sites to handle error return"
+    },
+    {
+      "path": "internal/telegram/bot.go",
+      "backup": ".tmp/current/backups/.rollback/internal-telegram-bot-low1.go.backup",
+      "timestamp": "2026-01-17T12:25:00.000Z",
+      "bug_id": "LOW-1",
+      "reason": "Rename initUpdatesChanel to initUpdatesChannel - fix typo in function name"
+    },
+    {
+      "path": "internal/services/messages.go",
+      "backup": ".tmp/current/backups/.rollback/internal-services-messages-low2.go.backup",
+      "timestamp": "2026-01-17T12:30:00.000Z",
+      "bug_id": "LOW-2",
+      "reason": "Convert Russian error messages to English - fix i18n issues in error messages"
+    },
+    {
+      "path": "internal/telegram/bot.go",
+      "backup": ".tmp/current/backups/.rollback/internal-telegram-bot-medium2.backup",
+      "timestamp": "2026-01-18T00:05:00.000Z",
+      "bug_id": "MEDIUM-2",
+      "reason": "Add error logging for ChangeIsMessaging when new chat members are detected"
+    }
+  ],
+  "files_created": []
+}
