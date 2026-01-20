@@ -14,7 +14,6 @@ import (
 const createTelegramBot = `-- name: CreateTelegramBot :one
 INSERT INTO
     telegram_bots (
-        owner_id,
         bot_id,
         username,
         first_name,
@@ -35,10 +34,8 @@ VALUES
         $6,
         $7,
         $8,
-        $9,
-        $10
+        $9
     ) RETURNING id,
-    owner_id,
     bot_id,
     username,
     first_name,
@@ -53,7 +50,6 @@ VALUES
 `
 
 type CreateTelegramBotParams struct {
-	OwnerID           pgtype.UUID      `json:"owner_id"`
 	BotID             *int64           `json:"bot_id"`
 	Username          string           `json:"username"`
 	FirstName         *string          `json:"first_name"`
@@ -67,7 +63,6 @@ type CreateTelegramBotParams struct {
 
 func (q *Queries) CreateTelegramBot(ctx context.Context, arg CreateTelegramBotParams) (TelegramBot, error) {
 	row := q.db.QueryRow(ctx, createTelegramBot,
-		arg.OwnerID,
 		arg.BotID,
 		arg.Username,
 		arg.FirstName,
@@ -81,7 +76,6 @@ func (q *Queries) CreateTelegramBot(ctx context.Context, arg CreateTelegramBotPa
 	var i TelegramBot
 	err := row.Scan(
 		&i.ID,
-		&i.OwnerID,
 		&i.BotID,
 		&i.Username,
 		&i.FirstName,
@@ -112,7 +106,6 @@ func (q *Queries) DeleteTelegramBot(ctx context.Context, id pgtype.UUID) error {
 const getTelegramBotByBotID = `-- name: GetTelegramBotByBotID :one
 SELECT
     id,
-    owner_id,
     bot_id,
     username,
     first_name,
@@ -135,7 +128,6 @@ func (q *Queries) GetTelegramBotByBotID(ctx context.Context, botID *int64) (Tele
 	var i TelegramBot
 	err := row.Scan(
 		&i.ID,
-		&i.OwnerID,
 		&i.BotID,
 		&i.Username,
 		&i.FirstName,
@@ -154,7 +146,6 @@ func (q *Queries) GetTelegramBotByBotID(ctx context.Context, botID *int64) (Tele
 const getTelegramBotByID = `-- name: GetTelegramBotByID :one
 SELECT
     id,
-    owner_id,
     bot_id,
     username,
     first_name,
@@ -177,7 +168,6 @@ func (q *Queries) GetTelegramBotByID(ctx context.Context, id pgtype.UUID) (Teleg
 	var i TelegramBot
 	err := row.Scan(
 		&i.ID,
-		&i.OwnerID,
 		&i.BotID,
 		&i.Username,
 		&i.FirstName,
@@ -196,7 +186,6 @@ func (q *Queries) GetTelegramBotByID(ctx context.Context, id pgtype.UUID) (Teleg
 const listTelegramBots = `-- name: ListTelegramBots :many
 SELECT
     id,
-    owner_id,
     bot_id,
     username,
     first_name,
@@ -225,7 +214,6 @@ func (q *Queries) ListTelegramBots(ctx context.Context) ([]TelegramBot, error) {
 		var i TelegramBot
 		if err := rows.Scan(
 			&i.ID,
-			&i.OwnerID,
 			&i.BotID,
 			&i.Username,
 			&i.FirstName,
@@ -252,20 +240,18 @@ const updateTelegramBot = `-- name: UpdateTelegramBot :one
 UPDATE
     telegram_bots
 SET
-    owner_id = $1,
-    bot_id = $2,
-    username = $3,
-    first_name = $4,
-    encrypted_token = $5,
-    encryption_version = $6,
-    "status" = $7,
-    last_error = $8,
-    last_checked_at = $9,
-    revoked_at = $10,
+    bot_id = $1,
+    username = $2,
+    first_name = $3,
+    encrypted_token = $4,
+    encryption_version = $5,
+    "status" = $6,
+    last_error = $7,
+    last_checked_at = $8,
+    revoked_at = $9,
     updated_at = NOW()
 WHERE
-    bot_id = $2 RETURNING id,
-    owner_id,
+    bot_id = $1 RETURNING id,
     bot_id,
     username,
     first_name,
@@ -280,7 +266,6 @@ WHERE
 `
 
 type UpdateTelegramBotParams struct {
-	OwnerID           pgtype.UUID      `json:"owner_id"`
 	BotID             *int64           `json:"bot_id"`
 	Username          string           `json:"username"`
 	FirstName         *string          `json:"first_name"`
@@ -294,7 +279,6 @@ type UpdateTelegramBotParams struct {
 
 func (q *Queries) UpdateTelegramBot(ctx context.Context, arg UpdateTelegramBotParams) (TelegramBot, error) {
 	row := q.db.QueryRow(ctx, updateTelegramBot,
-		arg.OwnerID,
 		arg.BotID,
 		arg.Username,
 		arg.FirstName,
@@ -308,7 +292,6 @@ func (q *Queries) UpdateTelegramBot(ctx context.Context, arg UpdateTelegramBotPa
 	var i TelegramBot
 	err := row.Scan(
 		&i.ID,
-		&i.OwnerID,
 		&i.BotID,
 		&i.Username,
 		&i.FirstName,

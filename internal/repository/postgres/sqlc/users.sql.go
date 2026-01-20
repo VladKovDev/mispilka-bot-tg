@@ -33,22 +33,19 @@ INSERT INTO
         telegram_id,
         username,
         first_name,
-        last_name,
-        role
+        last_name
     )
 VALUES
     (
         $1,
         $2,
         $3,
-        $4,
-        $5
+        $4
     ) RETURNING id,
     telegram_id,
     username,
     first_name,
     last_name,
-    role,
     created_at,
     is_active,
     blocked_at
@@ -59,7 +56,6 @@ type CreateUserParams struct {
 	Username   *string `json:"username"`
 	FirstName  *string `json:"first_name"`
 	LastName   *string `json:"last_name"`
-	Role       string  `json:"role"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
@@ -68,7 +64,6 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		arg.Username,
 		arg.FirstName,
 		arg.LastName,
-		arg.Role,
 	)
 	var i User
 	err := row.Scan(
@@ -77,7 +72,6 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Username,
 		&i.FirstName,
 		&i.LastName,
-		&i.Role,
 		&i.CreatedAt,
 		&i.IsActive,
 		&i.BlockedAt,
@@ -121,7 +115,6 @@ SELECT
     username,
     first_name,
     last_name,
-    role,
     created_at,
     is_active,
     blocked_at
@@ -141,7 +134,6 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.Username,
 		&i.FirstName,
 		&i.LastName,
-		&i.Role,
 		&i.CreatedAt,
 		&i.IsActive,
 		&i.BlockedAt,
@@ -156,7 +148,6 @@ SELECT
     username,
     first_name,
     last_name,
-    role,
     created_at,
     is_active,
     blocked_at
@@ -176,7 +167,6 @@ func (q *Queries) GetUserByTelegramID(ctx context.Context, telegramID *int64) (U
 		&i.Username,
 		&i.FirstName,
 		&i.LastName,
-		&i.Role,
 		&i.CreatedAt,
 		&i.IsActive,
 		&i.BlockedAt,
@@ -191,7 +181,6 @@ SELECT
     username,
     first_name,
     last_name,
-    role,
     created_at,
     is_active,
     blocked_at
@@ -225,65 +214,6 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 			&i.Username,
 			&i.FirstName,
 			&i.LastName,
-			&i.Role,
-			&i.CreatedAt,
-			&i.IsActive,
-			&i.BlockedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listUsersByRole = `-- name: ListUsersByRole :many
-SELECT
-    id,
-    telegram_id,
-    username,
-    first_name,
-    last_name,
-    role,
-    created_at,
-    is_active,
-    blocked_at
-FROM
-    users
-WHERE
-    role = $1
-    AND is_active = TRUE
-ORDER BY
-    created_at DESC
-LIMIT
-    $3 OFFSET $2
-`
-
-type ListUsersByRoleParams struct {
-	Role      string `json:"role"`
-	OffsetVal int32  `json:"offset_val"`
-	LimitVal  int32  `json:"limit_val"`
-}
-
-func (q *Queries) ListUsersByRole(ctx context.Context, arg ListUsersByRoleParams) ([]User, error) {
-	rows, err := q.db.Query(ctx, listUsersByRole, arg.Role, arg.OffsetVal, arg.LimitVal)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []User{}
-	for rows.Next() {
-		var i User
-		if err := rows.Scan(
-			&i.ID,
-			&i.TelegramID,
-			&i.Username,
-			&i.FirstName,
-			&i.LastName,
-			&i.Role,
 			&i.CreatedAt,
 			&i.IsActive,
 			&i.BlockedAt,
@@ -305,16 +235,14 @@ SET
     telegram_id = $1,
     username = $2,
     first_name = $3,
-    last_name = $4,
-    role = $5
+    last_name = $4
 WHERE
-    id = $6
+    id = $5
     AND is_active = TRUE RETURNING id,
     telegram_id,
     username,
     first_name,
     last_name,
-    role,
     created_at,
     is_active,
     blocked_at
@@ -325,7 +253,6 @@ type UpdateUserParams struct {
 	Username   *string     `json:"username"`
 	FirstName  *string     `json:"first_name"`
 	LastName   *string     `json:"last_name"`
-	Role       string      `json:"role"`
 	ID         pgtype.UUID `json:"id"`
 }
 
@@ -335,7 +262,6 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		arg.Username,
 		arg.FirstName,
 		arg.LastName,
-		arg.Role,
 		arg.ID,
 	)
 	var i User
@@ -345,7 +271,6 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.Username,
 		&i.FirstName,
 		&i.LastName,
-		&i.Role,
 		&i.CreatedAt,
 		&i.IsActive,
 		&i.BlockedAt,

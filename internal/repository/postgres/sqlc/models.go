@@ -109,7 +109,6 @@ type ScriptStep struct {
 
 type TelegramBot struct {
 	ID                pgtype.UUID      `json:"id"`
-	OwnerID           pgtype.UUID      `json:"owner_id"`
 	BotID             *int64           `json:"bot_id"`
 	Username          string           `json:"username"`
 	FirstName         *string          `json:"first_name"`
@@ -129,8 +128,14 @@ type User struct {
 	Username   *string          `json:"username"`
 	FirstName  *string          `json:"first_name"`
 	LastName   *string          `json:"last_name"`
-	Role       string           `json:"role"`
 	CreatedAt  pgtype.Timestamp `json:"created_at"`
 	IsActive   bool             `json:"is_active"`
 	BlockedAt  pgtype.Timestamp `json:"blocked_at"`
+}
+
+type UserTelegramBot struct {
+	UserID        pgtype.UUID      `json:"user_id"`
+	TelegramBotID pgtype.UUID      `json:"telegram_bot_id"`
+	Role          string           `json:"role"`
+	CreatedAt     pgtype.Timestamp `json:"created_at"`
 }

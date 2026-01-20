@@ -23,7 +23,6 @@ type Querier interface {
 	GetUserByTelegramID(ctx context.Context, telegramID *int64) (User, error)
 	ListTelegramBots(ctx context.Context) ([]TelegramBot, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
-	ListUsersByRole(ctx context.Context, arg ListUsersByRoleParams) ([]User, error)
 	UpdateTelegramBot(ctx context.Context, arg UpdateTelegramBotParams) (TelegramBot, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UserExistsByTelegramID(ctx context.Context, telegramID *int64) (bool, error)

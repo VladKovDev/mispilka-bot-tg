@@ -1,7 +1,6 @@
 -- name: CreateTelegramBot :one
 INSERT INTO
     telegram_bots (
-        owner_id,
         bot_id,
         username,
         first_name,
@@ -14,7 +13,6 @@ INSERT INTO
     )
 VALUES
     (
-        @owner_id,
         @bot_id,
         @username,
         @first_name,
@@ -25,7 +23,6 @@ VALUES
         @last_checked_at,
         @revoked_at
     ) RETURNING id,
-    owner_id,
     bot_id,
     username,
     first_name,
@@ -41,7 +38,6 @@ VALUES
 -- name: GetTelegramBotByID :one
 SELECT
     id,
-    owner_id,
     bot_id,
     username,
     first_name,
@@ -61,7 +57,6 @@ WHERE
 -- name: GetTelegramBotByBotID :one
 SELECT
     id,
-    owner_id,
     bot_id,
     username,
     first_name,
@@ -82,7 +77,6 @@ WHERE
 UPDATE
     telegram_bots
 SET
-    owner_id = @owner_id,
     bot_id = @bot_id,
     username = @username,
     first_name = @first_name,
@@ -95,7 +89,6 @@ SET
     updated_at = NOW()
 WHERE
     bot_id = @bot_id RETURNING id,
-    owner_id,
     bot_id,
     username,
     first_name,
@@ -117,7 +110,6 @@ WHERE
 -- name: ListTelegramBots :many
 SELECT
     id,
-    owner_id,
     bot_id,
     username,
     first_name,

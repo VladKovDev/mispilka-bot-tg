@@ -4,22 +4,19 @@ INSERT INTO
         telegram_id,
         username,
         first_name,
-        last_name,
-        role
+        last_name
     )
 VALUES
     (
         @telegram_id,
         @username,
         @first_name,
-        @last_name,
-        @role
+        @last_name
     ) RETURNING id,
     telegram_id,
     username,
     first_name,
     last_name,
-    role,
     created_at,
     is_active,
     blocked_at;
@@ -31,7 +28,6 @@ SELECT
     username,
     first_name,
     last_name,
-    role,
     created_at,
     is_active,
     blocked_at
@@ -48,7 +44,6 @@ SELECT
     username,
     first_name,
     last_name,
-    role,
     created_at,
     is_active,
     blocked_at
@@ -65,8 +60,7 @@ SET
     telegram_id = @telegram_id,
     username = @username,
     first_name = @first_name,
-    last_name = @last_name,
-    role = @role
+    last_name = @last_name
 WHERE
     id = @id
     AND is_active = TRUE RETURNING id,
@@ -74,7 +68,6 @@ WHERE
     username,
     first_name,
     last_name,
-    role,
     created_at,
     is_active,
     blocked_at;
@@ -102,7 +95,6 @@ SELECT
     username,
     first_name,
     last_name,
-    role,
     created_at,
     is_active,
     blocked_at
@@ -134,24 +126,3 @@ SELECT
             telegram_id = @telegram_id
             AND is_active = TRUE
     );
-
--- name: ListUsersByRole :many
-SELECT
-    id,
-    telegram_id,
-    username,
-    first_name,
-    last_name,
-    role,
-    created_at,
-    is_active,
-    blocked_at
-FROM
-    users
-WHERE
-    role = @role
-    AND is_active = TRUE
-ORDER BY
-    created_at DESC
-LIMIT
-    @limit_val OFFSET @offset_val;

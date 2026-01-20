@@ -37,7 +37,6 @@ func (r *PostgresTelegramBotRepository) Create(ctx context.Context, bot *entity.
 	}
 
 	params := sqlc.CreateTelegramBotParams{
-		OwnerID:           uuidToPgtype(uuid.Nil),
 		BotID:             &bot.BotID,
 		Username:          bot.Username,
 		FirstName:         firstName,
@@ -91,7 +90,6 @@ func (r *PostgresTelegramBotRepository) Update(ctx context.Context, bot *entity.
 	}
 
 	params := sqlc.UpdateTelegramBotParams{
-		OwnerID:           uuidToPgtype(uuid.Nil),
 		BotID:             &bot.BotID,
 		Username:          bot.Username,
 		FirstName:         firstName,

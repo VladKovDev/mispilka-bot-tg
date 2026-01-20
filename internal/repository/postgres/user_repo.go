@@ -31,7 +31,6 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *entity.User) 
 		Username:   &user.Username,
 		FirstName:  &user.FirstName,
 		LastName:   &user.LastName,
-		Role:       user.Role,
 	}
 	sqlcUser, err := r.queries.CreateUser(ctx, params)
 	if err != nil {
@@ -78,8 +77,7 @@ func (r *PostgresUserRepository) Update(ctx context.Context, user *entity.User) 
 		TelegramID: &user.TelegramID,
 		Username:   &user.Username,
 		FirstName:  &user.FirstName,
-		LastName:   &user.LastName,
-		Role:       user.Role}
+		LastName:   &user.LastName,}
 
 	_, err := r.queries.UpdateUser(ctx, arg)
 	if err != nil {
@@ -138,26 +136,6 @@ func (r *PostgresUserRepository) ListAll(ctx context.Context, limit, offset int)
 	return users, nil
 }
 
-func (r *PostgresUserRepository) ListByRole(ctx context.Context, role string, limit, offset int) ([]*entity.User, error) {
-	sqlcUsers, err := r.queries.ListUsersByRole(ctx, sqlc.ListUsersByRoleParams{
-		Role:      role,
-		LimitVal:  int32(limit),
-		OffsetVal: int32(offset),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get list of users by role: %w", err)
-	}
-	var users []*entity.User
-	for _, sqlcUser := range sqlcUsers {
-		user, err := toUserEntity(sqlcUser)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert sqlcUser to user entity: %w", err)
-		}
-		users = append(users, user)
-	}
-	return users, nil
-}
-
 func toUserEntity(sqlcUser sqlc.User) (*entity.User, error) {
 	id, err := pgtypeToUUID(sqlcUser.ID)
 	if err != nil {
@@ -170,7 +148,6 @@ func toUserEntity(sqlcUser sqlc.User) (*entity.User, error) {
 		Username:   *sqlcUser.Username,
 		FirstName:  *sqlcUser.FirstName,
 		LastName:   *sqlcUser.LastName,
-		Role:       sqlcUser.Role,
 		IsActive:   sqlcUser.IsActive,
 		CreatedAt:  pgtypeToTime(sqlcUser.CreatedAt),
 		BlockedAt:  pgtypeToTime(sqlcUser.BlockedAt),

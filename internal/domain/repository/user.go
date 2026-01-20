@@ -17,5 +17,4 @@ type UserRepository interface {
 
 	Count(ctx context.Context) (int64, error)
 	ListAll(ctx context.Context, limit, offset int) ([]*entity.User, error)
-	ListByRole(ctx context.Context, role string, limit, offset int) ([]*entity.User, error)
 }
