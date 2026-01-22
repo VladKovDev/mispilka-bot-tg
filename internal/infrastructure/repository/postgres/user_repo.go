@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/VladKovDev/promo-bot/internal/domain/entity"
-	"github.com/VladKovDev/promo-bot/internal/domain/repository"
-	"github.com/VladKovDev/promo-bot/internal/repository/postgres/sqlc"
+	"github.com/VladKovDev/promo-bot/internal/domain/user"
+	"github.com/VladKovDev/promo-bot/internal/infrastructure/repository/postgres/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -15,13 +14,13 @@ type PostgresUserRepository struct {
 	queries *sqlc.Queries
 }
 
-func NewPostgresUserRepository(db *pgxpool.Pool) repository.UserRepository {
+func NewPostgresUserRepository(db *pgxpool.Pool) user.Repository {
 	return &PostgresUserRepository{
 		queries: sqlc.New(db),
 	}
 }
 
-func (r *PostgresUserRepository) Create(ctx context.Context, user *entity.User) error {
+func (r *PostgresUserRepository) Create(ctx context.Context, user *user.User) error {
 	if err := user.Validate(); err != nil {
 		return fmt.Errorf("invalid user: %w", err)
 	}
@@ -46,7 +45,7 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *entity.User) 
 	return nil
 }
 
-func (r *PostgresUserRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.User, error) {
+func (r *PostgresUserRepository) GetByID(ctx context.Context, id uuid.UUID) (*user.User, error) {
 	sqlcID := uuidToPgtype(id)
 	sqlcUser, err := r.queries.GetUserByID(ctx, sqlcID)
 	if err != nil {
@@ -59,7 +58,7 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, id uuid.UUID) (*en
 	return user, nil
 }
 
-func (r *PostgresUserRepository) GetByTelegramID(ctx context.Context, telegramID *int64) (*entity.User, error) {
+func (r *PostgresUserRepository) GetByTelegramID(ctx context.Context, telegramID *int64) (*user.User, error) {
 	sqlcUser, err := r.queries.GetUserByTelegramID(ctx, telegramID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user by telegram id: %w", err)
@@ -71,7 +70,7 @@ func (r *PostgresUserRepository) GetByTelegramID(ctx context.Context, telegramID
 	return user, nil
 }
 
-func (r *PostgresUserRepository) Update(ctx context.Context, user *entity.User) error {
+func (r *PostgresUserRepository) Update(ctx context.Context, user *user.User) error {
 	arg := sqlc.UpdateUserParams{
 		ID:         uuidToPgtype(user.ID),
 		TelegramID: &user.TelegramID,
@@ -116,7 +115,7 @@ func (r *PostgresUserRepository) Count(ctx context.Context) (int64, error) {
 	return count, nil
 }
 
-func (r *PostgresUserRepository) ListAll(ctx context.Context, limit, offset int) ([]*entity.User, error) {
+func (r *PostgresUserRepository) ListAll(ctx context.Context, limit, offset int) ([]*user.User, error) {
 	sqlcUsers, err := r.queries.ListUsers(ctx, sqlc.ListUsersParams{
 		LimitVal:  int32(limit),
 		OffsetVal: int32(offset),
@@ -125,7 +124,7 @@ func (r *PostgresUserRepository) ListAll(ctx context.Context, limit, offset int)
 		return nil, fmt.Errorf("failed to list all users: %w", err)
 	}
 
-	var users []*entity.User
+	var users []*user.User
 	for _, sqlcUser := range sqlcUsers {
 		user, err := toUserEntity(sqlcUser)
 		if err != nil {
@@ -136,13 +135,13 @@ func (r *PostgresUserRepository) ListAll(ctx context.Context, limit, offset int)
 	return users, nil
 }
 
-func toUserEntity(sqlcUser sqlc.User) (*entity.User, error) {
+func toUserEntity(sqlcUser sqlc.User) (*user.User, error) {
 	id, err := pgtypeToUUID(sqlcUser.ID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid user ID: %w", err)
 	}
 
-	user := &entity.User{
+	user := &user.User{
 		ID:         id,
 		TelegramID: *sqlcUser.TelegramID,
 		Username:   *sqlcUser.Username,

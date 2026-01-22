@@ -39,6 +39,7 @@ CREATE TABLE user_telegram_bots (
 -- Таблица скриптов
 CREATE TABLE scripts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    telegram_bot_id UUID NOT NULL REFERENCES telegram_bots(id) ON DELETE CASCADE,
     "name" TEXT UNIQUE NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     private_group_id UUID,

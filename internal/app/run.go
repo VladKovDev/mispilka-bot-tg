@@ -6,9 +6,10 @@ import (
 	"os"
 
 	"github.com/VladKovDev/promo-bot/internal/config"
-	"github.com/VladKovDev/promo-bot/internal/crypto"
-	"github.com/VladKovDev/promo-bot/internal/domain/repository"
-	"github.com/VladKovDev/promo-bot/internal/repository/postgres"
+	"github.com/VladKovDev/promo-bot/internal/infrastructure/crypto"
+	"github.com/VladKovDev/promo-bot/internal/domain/user"
+	"github.com/VladKovDev/promo-bot/internal/domain/telegram_bot"
+	"github.com/VladKovDev/promo-bot/internal/infrastructure/repository/postgres"
 	"github.com/VladKovDev/promo-bot/pkg/logger"
 )
 
@@ -18,17 +19,17 @@ type App struct {
 	Logger          logger.Logger
 	DB              *postgres.Pool
 	KeyStore        *crypto.KeyStore
-	UserRepo        repository.UserRepository
-	TelegramBotRepo repository.TelegramBotRepository
+	UserRepo        user.Repository
+	TelegramBotRepo telegram_bot.Repository
 }
 
 // NewApp constructs the application object and initializes repositories.
 func NewApp(cfg *config.Config, pool *postgres.Pool, logger logger.Logger, keyStore *crypto.KeyStore) *App {
-	var userRepo repository.UserRepository
+	var userRepo user.Repository
 	if pool != nil && pool.Pool != nil {
 		userRepo = postgres.NewPostgresUserRepository(pool.Pool)
 	}
-	var telegramBotRepo repository.TelegramBotRepository
+	var telegramBotRepo telegram_bot.Repository
 	if pool != nil && pool.Pool != nil {
 		telegramBotRepo = postgres.NewPostgresTelegramBotRepository(pool.Pool)
 	}

@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/VladKovDev/promo-bot/internal/repository/postgres"
+	"github.com/VladKovDev/promo-bot/internal/infrastructure/repository/postgres"
 	"github.com/VladKovDev/promo-bot/pkg/logger"
 	"go.uber.org/zap"
 )

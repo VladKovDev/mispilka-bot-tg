@@ -1,4 +1,4 @@
-package entity
+package telegram_bot
 
 import (
 	"fmt"

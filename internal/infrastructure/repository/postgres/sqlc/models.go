@@ -64,6 +64,7 @@ type ScheduledStep struct {
 
 type Script struct {
 	ID             pgtype.UUID      `json:"id"`
+	TelegramBotID  pgtype.UUID      `json:"telegram_bot_id"`
 	Name           string           `json:"name"`
 	IsActive       bool             `json:"is_active"`
 	PrivateGroupID pgtype.UUID      `json:"private_group_id"`
