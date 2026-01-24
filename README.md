@@ -21,28 +21,33 @@ A Telegram bot for managing paid access to private groups using Prodamus payment
 ### Setup
 
 1. **Clone the repository:**
+
    ```bash
    git clone <repo-url>
    cd mispilka-bot-tg
    ```
 
 2. **Install Go dependencies:**
+
    ```bash
    go mod download
    ```
 
 3. **Configure environment:**
+
    ```bash
    cp .env.example .env
    # Edit .env with your values (see Configuration section below)
    ```
 
 4. **Run the bot:**
+
    ```bash
    make run-dev
    ```
 
    Or for production build:
+
    ```bash
    make build && make run
    ```
@@ -141,21 +146,25 @@ Recommended reading order to understand the codebase:
 ## Troubleshooting
 
 **Bot doesn't respond to commands:**
+
 - Verify `BOT_TOKEN` is correct and bot is running
 - Check that the bot has been started in Telegram: send `/start` to your bot
 - Enable debug logging: `BOT_DEBUG=true make run-dev`
 
 **Webhook not receiving payments:**
+
 - Verify `PRODAMUS_SECRET_KEY` matches your Prodamus account settings
 - Check `WEBHOOK_HOST` and `WEBHOOK_PORT` - ensure the server is publicly accessible
 - Check logs for webhook errors: `[PAYMENT_ERROR]` entries indicate issues
 
 **Invite links not working:**
+
 - Verify `PRIVATE_GROUP_ID` is correct (use numeric ID, not username)
 - Ensure the bot is an administrator in the private group
 - Check bot has permission to create invite links
 
 **Users not joining group after payment:**
+
 - Check `data/users.json` to see if user has `PaymentDate` set
 - Verify invite link was generated (check `InviteLink` field)
 - Ensure user is clicking the correct invite link sent by the bot
@@ -175,7 +184,3 @@ BOT_DEBUG=true make run-dev
 # Run production build
 make run
 ```
-
-## License
-
-[Specify your license here]

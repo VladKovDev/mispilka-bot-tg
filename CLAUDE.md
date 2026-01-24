@@ -1,218 +1,108 @@
-# Agent Orchestration Rules
+# CLAUDE.md
 
-> **IMPORTANT**: This file overrides default Claude Code behavior. Follow these rules strictly.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Main Pattern: You Are The Orchestrator
+## Project Overview
 
-This is the DEFAULT pattern used in 95% of cases for feature development, bug fixes, refactoring, and general coding tasks.
+**Mispilka Bot** - A Telegram bot for managing paid access to a private group. Users pay via Prodamus payment processor, receive invite links, and get scheduled messages. Built in Go 1.22.2.
 
-### Core Rules
-
-**1. GATHER FULL CONTEXT FIRST (MANDATORY)**
-
-Before delegating or implementing any task:
-- Read existing code in related files
-- Search codebase for similar patterns
-- Review relevant documentation (specs, design docs, ADRs)
-- Check recent commits in related areas
-- Understand dependencies and integration points
-
-NEVER delegate or implement blindly.
-
-**2. DELEGATE TO SUBAGENTS**
-
-Before delegation:
-- Provide complete context (code snippets, file paths, patterns, docs)
-- Specify exact expected output and validation criteria
-
-After delegation (CRITICAL):
-- ALWAYS verify results (read modified files, run type-check)
-- NEVER skip verification
-- If incorrect: re-delegate with corrections and errors
-- If TypeScript errors: re-delegate to same agent OR typescript-types-specialist
-
-**3. EXECUTE DIRECTLY (MINIMAL ONLY)**
-
-Direct execution only for:
-- Single dependency install
-- Single-line fixes (typos, obvious bugs)
-- Simple imports
-- Minimal config changes
-
-Everything else: delegate.
-
-**4. TRACK PROGRESS**
-
-- Create todos at task start
-- Mark in_progress BEFORE starting
-- Mark completed AFTER verification only
-
-**5. COMMIT STRATEGY**
-
-Run `/push patch` after EACH completed task:
-- Mark task [X] in tasks.md
-- Add artifacts: `→ Artifacts: [file1](path), [file2](path)`
-- Update TodoWrite to completed
-- Then `/push patch`
-
-**6. EXECUTION PATTERN**
-
-```
-FOR EACH TASK:
-1. Read task description
-2. GATHER FULL CONTEXT (code + docs + patterns + history)
-3. Delegate to subagent OR execute directly (trivial only)
-4. VERIFY results (read files + run type-check) - NEVER skip
-5. Accept/reject loop (re-delegate if needed)
-6. Update TodoWrite to completed
-7. Mark task [X] in tasks.md + add artifacts
-8. Run /push patch
-9. Move to next task
-```
-
-**7. HANDLING CONTRADICTIONS**
-
-If contradictions occur:
-- Gather context, analyze project patterns
-- If truly ambiguous: ask user with specific options
-- Only ask when unable to determine best practice (rare, ~10%)
-
-**8. LIBRARY-FIRST APPROACH (MANDATORY)**
-
-Before writing new code (>20 lines), ALWAYS search for existing libraries:
-- WebSearch: "npm {functionality} library 2024" or "python {functionality} package"
-- Context7: documentation for candidate libraries
-- Check: weekly downloads >1000, commits in last 6 months, TypeScript/types support
-
-**Use library when**:
-- Covers >70% of required functionality
-- Actively maintained, no critical vulnerabilities
-- Reasonable bundle size (check bundlephobia.com)
-
-**Write custom code when**:
-- <20 lines of simple logic
-- All libraries abandoned or insecure
-- Core business logic requiring full control
-
-### Planning Phase (ALWAYS First)
-
-Before implementing tasks:
-- Analyze execution model (parallel/sequential)
-- Assign executors: MAIN for trivial, existing if 100% match, FUTURE otherwise
-- Create FUTURE agents: launch N meta-agent-v3 calls in single message, ask restart
-- Resolve research (simple: solve now, complex: deepresearch prompt)
-- Atomicity: 1 task = 1 agent call
-- Parallel: launch N calls in single message (not sequentially)
-
-See speckit.implement.md for details.
-
----
-
-## Health Workflows Pattern (5% of cases)
-
-Slash commands: `/health-bugs`, `/health-security`, `/health-cleanup`, `/health-deps`
-
-Follow command-specific instructions. See `docs/Agents Ecosystem/AGENT-ORCHESTRATION.md`.
-
----
-
-## Project Conventions
-
-**File Organization**:
-- Agents: `.claude/agents/{domain}/{orchestrators|workers}/`
-- Commands: `.claude/commands/`
-- Skills: `.claude/skills/{skill-name}/SKILL.md`
-- Temporary: `.tmp/current/` (git ignored)
-- Reports: `docs/reports/{domain}/{YYYY-MM}/`
-
-**Code Standards**:
-- Type-check must pass before commit
-- Build must pass before commit
-- No hardcoded credentials
-
-**Agent Selection**:
-- Worker: Plan file specifies nextAgent (health workflows only)
-- Skill: Reusable utility, no state, <100 lines
-
-**Supabase Operations**:
-- Use Supabase MCP when `.mcp.json` includes supabase server
-
-**MCP Configuration**:
-- UNIFIED (`.mcp.json`): All servers with auto-optimization
-  - Claude Code automatically applies defer_loading when needed
-  - Includes: context7, sequential-thinking, supabase, playwright, shadcn, serena
-  - 85% context reduction via MCP Tool Search (automatic, >10K tokens threshold)
-  - Uses env vars for Supabase (set `SUPABASE_PROJECT_REF`, `SUPABASE_ACCESS_TOKEN` if needed)
-- Legacy configs available in `mcp/` for reference
-
----
-
-## Task Tracking with Beads
-
-> **Attribution**: [Beads](https://github.com/steveyegge/beads) methodology by [Steve Yegge](https://github.com/steveyegge)
-
-If project uses Beads (`/beads-init` was run), follow this workflow:
-
-### Session Workflow
+## Development Commands
 
 ```bash
-# START
-bd prime                    # Restore context
-bd ready                    # Find available work
+# Build the bot
+make build
+# or: go build -o ./.bin/bot cmd/app/main.go
 
-# WORK
-bd update ID --status in_progress  # Take task
-# ... implement ...
-bd close ID --reason "Done"        # Complete task
-/push patch                        # Commit
+# Run the bot (production build)
+make run
 
-# END (MANDATORY!)
-bd sync
-git push
+# Run in development mode
+make run-dev
+# or: go run cmd/app/main.go
+
+# Run with debug logging
+BOT_DEBUG=true make run-dev
 ```
 
-### When to Use What
+### Required Environment Variables
 
-| Scenario | Tool |
-|----------|------|
-| Large feature (>1 day) | `/speckit.specify` → `/speckit.tobeads` |
-| Small feature (<1 day) | `bd create -t feature` |
-| Bug | `bd create -t bug` |
-| Tech debt | `bd create -t chore` |
-| Research/spike | `bd mol wisp exploration` |
+Create a `.env` file (see `.env.example`):
 
-### Emergent Work
-
-Found something during current task?
 ```bash
-bd create "Found: ..." -t bug --deps discovered-from:PREFIX-current
+BOT_TOKEN=              # Telegram bot token (required)
+PRIVATE_GROUP_ID=       # Private Telegram group ID (required)
+ADMIN_IDS=              # Comma-separated admin Telegram IDs
+PRODAMUS_SECRET_KEY=    # Prodamus webhook secret (required)
+PRODAMUS_API_URL=       # Prodamus API URL (required)
+PRODAMUS_PRODUCT_NAME=  # Product name (default: "Доступ к обучающим материалам")
+PRODAMUS_PRODUCT_PRICE= # Price (default: "500")
+WEBHOOK_HOST=           # HTTP server host (default: "0.0.0.0")
+WEBHOOK_PORT=           # HTTP server port (default: "8080")
+WEBHOOK_PATH=           # Webhook path (default: "/webhook/prodamus")
 ```
 
-### Initialize Beads
+## Architecture
 
-Run `/beads-init` to set up Beads in this project.
+### Entry Point
 
-See `.claude/docs/beads-quickstart.md` for full reference.
+`cmd/app/main.go` - Wires together bot and HTTP server, handles graceful shutdown.
 
+### Core Components
 
-### After implementing any change:
+1. **Telegram Bot** (`internal/telegram/`)
+   - `bot.go` - Main bot logic, update handling, group join/leave tracking
+   - `handlers.go` - Command handlers (`/start`, `/restart`, `/users`)
+   - `command_service.go` - Command registration with role-based visibility
+   - `command_mapper.go` - Maps commands to handlers
 
-```
-bash .claude/scripts/verify.sh
-```
+2. **HTTP Server** (`internal/server/`)
+   - `server.go` - HTTP server for webhooks
+   - `prodamus/webhook.go` - Prodamus payment webhook handler
 
-if exit code ≠ 0 → fix issues and retry
-do not finalize task until script exits 0
+3. **Services** (`internal/services/`)
+   - `users.go` - User data management (JSON file storage)
+   - `invite.go` - Invite link generation/revocation
+   - `messages.go` - Message templates and keyboard configuration
+   - `scheduler.go` - Message scheduling for users
+   - `payment/payment.go` - Payment link generation via Prodamus
+   - `storage.go` - Generic JSON read/write utilities
 
+4. **Domain** (`internal/domain/`)
+   - `command/command.go` - Command definition types
+   - `command/registry.go` - Central command registry with roles
 
----
+5. **Config** (`config/config.go`)
+   - Loads from `.env` file, validates required fields
 
-## Reference Docs
+### Data Flow
 
-- Agent orchestration: `docs/Agents Ecosystem/AGENT-ORCHESTRATION.md`
-- Architecture: `docs/Agents Ecosystem/ARCHITECTURE.md`
-- Quality gates: `docs/Agents Ecosystem/QUALITY-GATES-SPECIFICATION.md`
-- Report templates: `docs/Agents Ecosystem/REPORT-TEMPLATE-STANDARD.md`
-- **Beads quickstart**: `.claude/docs/beads-quickstart.md`
+1. **User onboarding**: `/start` → creates user → sends welcome message with "Accept terms" button
+2. **Accept terms**: User clicks → generates Prodamus payment link → starts message scheduling
+3. **Payment**: Prodamus webhook → generates invite link → sends group invite message
+4. **Group access**: User joins → `chat_member` update → marks `JoinedGroup=true` → revokes invite link
+5. **Scheduled messages**: Background scheduler sends messages from user's queue
+6. **Group leave**: User leaves → generates new invite link (if paid) → sends via DM
 
-Use 'bd' for task tracking required
+### Key Patterns
+
+**Command Registry**: Commands defined in `internal/domain/command/registry.go` with roles (public/admin). New commands: add to `AllCommands` slice.
+
+**Message Templates**: Stored in `data/messages.json`. Use `{{placeholder}}` syntax. Support for photos and inline keyboards.
+
+**Storage**: JSON files in `data/` directory. Generic `ReadJSON[T]` / `WriteJSON[T]` utilities with retry logic.
+
+**Join Tracking**: Two mechanisms handle group joins:
+- `chat_member` updates (primary)
+- `new_chat_members` message events (fallback)
+
+Both update `JoinedGroup` status and revoke invite links.
+
+**Payment Callbacks**: HTTP server uses callbacks to invoke bot methods (`GenerateInviteLink`, `SendInviteMessage`).
+
+### Important Notes
+
+- All user data stored in `data/users.json`
+- Message scheduling persisted to `data/schedule_backup.json`
+- Invite links are one-time use (revoked after join)
+- Admin-only commands silently fail for non-admins
+- HTML parse mode for messages (use `<b>`, `<code>`, etc.)
