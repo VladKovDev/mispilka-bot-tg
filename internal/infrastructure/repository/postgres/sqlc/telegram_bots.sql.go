@@ -17,12 +17,13 @@ INSERT INTO
         bot_id,
         username,
         first_name,
+        last_name,
         encrypted_token,
         encryption_version,
-        "status",
         last_error,
         last_checked_at,
-        revoked_at
+        revoked_at,
+        disabled_at
     )
 VALUES
     (
@@ -34,16 +35,18 @@ VALUES
         $6,
         $7,
         $8,
-        $9
+        $9,
+        $10
     ) RETURNING id,
     bot_id,
     username,
     first_name,
+    last_name,
     encrypted_token,
     encryption_version,
-    "status",
     last_error,
     last_checked_at,
+    disabled_at,
     revoked_at,
     created_at,
     updated_at
@@ -53,12 +56,13 @@ type CreateTelegramBotParams struct {
 	BotID             *int64           `json:"bot_id"`
 	Username          string           `json:"username"`
 	FirstName         *string          `json:"first_name"`
+	LastName          *string          `json:"last_name"`
 	EncryptedToken    []byte           `json:"encrypted_token"`
 	EncryptionVersion int32            `json:"encryption_version"`
-	Status            string           `json:"status"`
 	LastError         *string          `json:"last_error"`
 	LastCheckedAt     pgtype.Timestamp `json:"last_checked_at"`
 	RevokedAt         pgtype.Timestamp `json:"revoked_at"`
+	DisabledAt        pgtype.Timestamp `json:"disabled_at"`
 }
 
 func (q *Queries) CreateTelegramBot(ctx context.Context, arg CreateTelegramBotParams) (TelegramBot, error) {
@@ -66,12 +70,13 @@ func (q *Queries) CreateTelegramBot(ctx context.Context, arg CreateTelegramBotPa
 		arg.BotID,
 		arg.Username,
 		arg.FirstName,
+		arg.LastName,
 		arg.EncryptedToken,
 		arg.EncryptionVersion,
-		arg.Status,
 		arg.LastError,
 		arg.LastCheckedAt,
 		arg.RevokedAt,
+		arg.DisabledAt,
 	)
 	var i TelegramBot
 	err := row.Scan(
@@ -79,11 +84,12 @@ func (q *Queries) CreateTelegramBot(ctx context.Context, arg CreateTelegramBotPa
 		&i.BotID,
 		&i.Username,
 		&i.FirstName,
+		&i.LastName,
 		&i.EncryptedToken,
 		&i.EncryptionVersion,
-		&i.Status,
 		&i.LastError,
 		&i.LastCheckedAt,
+		&i.DisabledAt,
 		&i.RevokedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -109,11 +115,12 @@ SELECT
     bot_id,
     username,
     first_name,
+    last_name,
     encrypted_token,
     encryption_version,
-    "status",
     last_error,
     last_checked_at,
+    disabled_at,
     revoked_at,
     created_at,
     updated_at
@@ -131,11 +138,12 @@ func (q *Queries) GetTelegramBotByBotID(ctx context.Context, botID *int64) (Tele
 		&i.BotID,
 		&i.Username,
 		&i.FirstName,
+		&i.LastName,
 		&i.EncryptedToken,
 		&i.EncryptionVersion,
-		&i.Status,
 		&i.LastError,
 		&i.LastCheckedAt,
+		&i.DisabledAt,
 		&i.RevokedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -149,11 +157,12 @@ SELECT
     bot_id,
     username,
     first_name,
+    last_name,
     encrypted_token,
     encryption_version,
-    "status",
     last_error,
     last_checked_at,
+    disabled_at,
     revoked_at,
     created_at,
     updated_at
@@ -171,11 +180,12 @@ func (q *Queries) GetTelegramBotByID(ctx context.Context, id pgtype.UUID) (Teleg
 		&i.BotID,
 		&i.Username,
 		&i.FirstName,
+		&i.LastName,
 		&i.EncryptedToken,
 		&i.EncryptionVersion,
-		&i.Status,
 		&i.LastError,
 		&i.LastCheckedAt,
+		&i.DisabledAt,
 		&i.RevokedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -189,11 +199,12 @@ SELECT
     bot_id,
     username,
     first_name,
+    last_name,
     encrypted_token,
     encryption_version,
-    "status",
     last_error,
     last_checked_at,
+    disabled_at,
     revoked_at,
     created_at,
     updated_at
@@ -217,11 +228,12 @@ func (q *Queries) ListTelegramBots(ctx context.Context) ([]TelegramBot, error) {
 			&i.BotID,
 			&i.Username,
 			&i.FirstName,
+			&i.LastName,
 			&i.EncryptedToken,
 			&i.EncryptionVersion,
-			&i.Status,
 			&i.LastError,
 			&i.LastCheckedAt,
+			&i.DisabledAt,
 			&i.RevokedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -243,23 +255,25 @@ SET
     bot_id = $1,
     username = $2,
     first_name = $3,
-    encrypted_token = $4,
-    encryption_version = $5,
-    "status" = $6,
+    last_name = $4,
+    encrypted_token = $5,
+    encryption_version = $6,
     last_error = $7,
     last_checked_at = $8,
     revoked_at = $9,
+    disabled_at = $10,
     updated_at = NOW()
 WHERE
     bot_id = $1 RETURNING id,
     bot_id,
     username,
     first_name,
+    last_name,
     encrypted_token,
     encryption_version,
-    "status",
     last_error,
     last_checked_at,
+    disabled_at,
     revoked_at,
     created_at,
     updated_at
@@ -269,12 +283,13 @@ type UpdateTelegramBotParams struct {
 	BotID             *int64           `json:"bot_id"`
 	Username          string           `json:"username"`
 	FirstName         *string          `json:"first_name"`
+	LastName          *string          `json:"last_name"`
 	EncryptedToken    []byte           `json:"encrypted_token"`
 	EncryptionVersion int32            `json:"encryption_version"`
-	Status            string           `json:"status"`
 	LastError         *string          `json:"last_error"`
 	LastCheckedAt     pgtype.Timestamp `json:"last_checked_at"`
 	RevokedAt         pgtype.Timestamp `json:"revoked_at"`
+	DisabledAt        pgtype.Timestamp `json:"disabled_at"`
 }
 
 func (q *Queries) UpdateTelegramBot(ctx context.Context, arg UpdateTelegramBotParams) (TelegramBot, error) {
@@ -282,12 +297,13 @@ func (q *Queries) UpdateTelegramBot(ctx context.Context, arg UpdateTelegramBotPa
 		arg.BotID,
 		arg.Username,
 		arg.FirstName,
+		arg.LastName,
 		arg.EncryptedToken,
 		arg.EncryptionVersion,
-		arg.Status,
 		arg.LastError,
 		arg.LastCheckedAt,
 		arg.RevokedAt,
+		arg.DisabledAt,
 	)
 	var i TelegramBot
 	err := row.Scan(
@@ -295,11 +311,12 @@ func (q *Queries) UpdateTelegramBot(ctx context.Context, arg UpdateTelegramBotPa
 		&i.BotID,
 		&i.Username,
 		&i.FirstName,
+		&i.LastName,
 		&i.EncryptedToken,
 		&i.EncryptionVersion,
-		&i.Status,
 		&i.LastError,
 		&i.LastCheckedAt,
+		&i.DisabledAt,
 		&i.RevokedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,

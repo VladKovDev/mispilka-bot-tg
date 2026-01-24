@@ -113,11 +113,12 @@ type TelegramBot struct {
 	BotID             *int64           `json:"bot_id"`
 	Username          string           `json:"username"`
 	FirstName         *string          `json:"first_name"`
+	LastName          *string          `json:"last_name"`
 	EncryptedToken    []byte           `json:"encrypted_token"`
 	EncryptionVersion int32            `json:"encryption_version"`
-	Status            string           `json:"status"`
 	LastError         *string          `json:"last_error"`
 	LastCheckedAt     pgtype.Timestamp `json:"last_checked_at"`
+	DisabledAt        pgtype.Timestamp `json:"disabled_at"`
 	RevokedAt         pgtype.Timestamp `json:"revoked_at"`
 	CreatedAt         pgtype.Timestamp `json:"created_at"`
 	UpdatedAt         pgtype.Timestamp `json:"updated_at"`

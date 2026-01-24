@@ -3,26 +3,31 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/VladKovDev/promo-bot/internal/domain/telegram_bot"
+	"github.com/VladKovDev/promo-bot/internal/infrastructure/crypto"
 	"github.com/VladKovDev/promo-bot/internal/infrastructure/repository/postgres/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type PostgresTelegramBotRepository struct {
-	queries *sqlc.Queries
+	queries  *sqlc.Queries
+	keyStore *crypto.KeyStore
 }
 
-func NewPostgresTelegramBotRepository(db *pgxpool.Pool) telegram_bot.Repository {
+func NewPostgresTelegramBotRepository(db *pgxpool.Pool, keyStore *crypto.KeyStore) telegram_bot.Repository {
 	return &PostgresTelegramBotRepository{
-		queries: sqlc.New(db),
+		queries:  sqlc.New(db),
+		keyStore: keyStore,
 	}
 }
 
 func (r *PostgresTelegramBotRepository) Create(ctx context.Context, bot *telegram_bot.TelegramBot) error {
-	if err := bot.Validate(); err != nil {
-		return fmt.Errorf("invalid telegram bot: %w", err)
+	var botID *int64
+	if bot.BotID != 0 {
+		botID = &bot.BotID
 	}
 
 	var firstName *string
@@ -30,21 +35,28 @@ func (r *PostgresTelegramBotRepository) Create(ctx context.Context, bot *telegra
 		firstName = &bot.FirstName
 	}
 
-	var lastError *string
-	if bot.LastError != "" {
-		lastError = &bot.LastError
+	var lastName *string
+	if bot.LastName != "" {
+		lastName = &bot.LastName
+	}
+
+	enc := r.keyStore.Encryptors[r.keyStore.Current]
+	encryptedToken, err := enc.Encrypt([]byte(bot.Token))
+	if err != nil {
+		return fmt.Errorf("failed to encrypt token: %w", err)
 	}
 
 	params := sqlc.CreateTelegramBotParams{
-		BotID:             &bot.BotID,
+		BotID:             botID,
 		Username:          bot.Username,
 		FirstName:         firstName,
-		EncryptedToken:    bot.EncryptedToken,
-		EncryptionVersion: int32(bot.EncryptionVersion),
-		Status:            bot.Status,
-		LastError:         lastError,
-		LastCheckedAt:     timeToPgtype(bot.LastCheckedAt),
+		LastName:          lastName,
+		EncryptedToken:    encryptedToken,
+		EncryptionVersion: int32(r.keyStore.Current),
+		LastError:         nil,
+		LastCheckedAt:     timeToPgtype(time.Time{}),
 		RevokedAt:         timeToPgtype(bot.RevokedAt),
+		DisabledAt:        timeToPgtype(bot.DisabledAt),
 	}
 
 	created, err := r.queries.CreateTelegramBot(ctx, params)
@@ -52,7 +64,10 @@ func (r *PostgresTelegramBotRepository) Create(ctx context.Context, bot *telegra
 		return fmt.Errorf("failed to create telegram bot: %w", err)
 	}
 
-	createdBot, _ := toTelegramBotEntity(created)
+	createdBot, err := r.toDomain(created)
+	if err != nil {
+		return fmt.Errorf("failed to map created telegram bot: %w", err)
+	}
 	*bot = *createdBot
 	return nil
 }
@@ -62,7 +77,7 @@ func (r *PostgresTelegramBotRepository) GetByID(ctx context.Context, id uuid.UUI
 	if err != nil {
 		return nil, fmt.Errorf("failed to get telegram bot by id: %w", err)
 	}
-	return toTelegramBotEntity(tb)
+	return r.toDomain(tb)
 }
 
 func (r *PostgresTelegramBotRepository) GetByTelegramID(ctx context.Context, telegramID int64) (*telegram_bot.TelegramBot, error) {
@@ -70,12 +85,13 @@ func (r *PostgresTelegramBotRepository) GetByTelegramID(ctx context.Context, tel
 	if err != nil {
 		return nil, fmt.Errorf("failed to get telegram bot by telegram id: %w", err)
 	}
-	return toTelegramBotEntity(tb)
+	return r.toDomain(tb)
 }
 
 func (r *PostgresTelegramBotRepository) Update(ctx context.Context, bot *telegram_bot.TelegramBot) error {
-	if err := bot.Validate(); err != nil {
-		return fmt.Errorf("invalid telegram bot: %w", err)
+	var botID *int64
+	if bot.BotID != 0 {
+		botID = &bot.BotID
 	}
 
 	var firstName *string
@@ -83,21 +99,28 @@ func (r *PostgresTelegramBotRepository) Update(ctx context.Context, bot *telegra
 		firstName = &bot.FirstName
 	}
 
-	var lastError *string
-	if bot.LastError != "" {
-		lastError = &bot.LastError
+	var lastName *string
+	if bot.LastName != "" {
+		lastName = &bot.LastName
+	}
+
+	enc := r.keyStore.Encryptors[r.keyStore.Current]
+	encryptedToken, err := enc.Encrypt([]byte(bot.Token))
+	if err != nil {
+		return fmt.Errorf("failed to encrypt token: %w", err)
 	}
 
 	params := sqlc.UpdateTelegramBotParams{
-		BotID:             &bot.BotID,
+		BotID:             botID,
 		Username:          bot.Username,
 		FirstName:         firstName,
-		EncryptedToken:    bot.EncryptedToken,
-		EncryptionVersion: int32(bot.EncryptionVersion),
-		Status:            bot.Status,
-		LastError:         lastError,
-		LastCheckedAt:     timeToPgtype(bot.LastCheckedAt),
+		LastName:          lastName,
+		EncryptedToken:    encryptedToken,
+		EncryptionVersion: int32(r.keyStore.Current),
+		LastError:         nil,
+		LastCheckedAt:     timeToPgtype(time.Time{}),
 		RevokedAt:         timeToPgtype(bot.RevokedAt),
+		DisabledAt:        timeToPgtype(bot.DisabledAt),
 	}
 
 	updated, err := r.queries.UpdateTelegramBot(ctx, params)
@@ -105,7 +128,10 @@ func (r *PostgresTelegramBotRepository) Update(ctx context.Context, bot *telegra
 		return fmt.Errorf("failed to update telegram bot: %w", err)
 	}
 
-	updatedBot, _ := toTelegramBotEntity(updated)
+	updatedBot, err := r.toDomain(updated)
+	if err != nil {
+		return fmt.Errorf("failed to map updated telegram bot: %w", err)
+	}
 	*bot = *updatedBot
 	return nil
 }
@@ -125,7 +151,7 @@ func (r *PostgresTelegramBotRepository) ListAll(ctx context.Context) ([]*telegra
 	}
 	var bots []*telegram_bot.TelegramBot
 	for _, it := range items {
-		b, err := toTelegramBotEntity(it)
+		b, err := r.toDomain(it)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert telegram bot: %w", err)
 		}
@@ -134,35 +160,34 @@ func (r *PostgresTelegramBotRepository) ListAll(ctx context.Context) ([]*telegra
 	return bots, nil
 }
 
-func toTelegramBotEntity(tb sqlc.TelegramBot) (*telegram_bot.TelegramBot, error) {
-	var botID int64
-	if tb.BotID != nil {
-		botID = *tb.BotID
+func (r *PostgresTelegramBotRepository) toDomain(tb sqlc.TelegramBot) (*telegram_bot.TelegramBot, error) {
+	id, err := pgtypeToUUID(tb.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert telegram bot ID: %w", err)
 	}
 
-	var firstName string
-	if tb.FirstName != nil {
-		firstName = *tb.FirstName
+	var tokenStr string
+	if len(tb.EncryptedToken) > 0 {
+		enc, ok := r.keyStore.Encryptors[int(tb.EncryptionVersion)]
+		if !ok {
+			return nil, fmt.Errorf("unknown encryption version: %d", tb.EncryptionVersion)
+		}
+		token, err := enc.Decrypt(tb.EncryptedToken)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decrypt telegram bot token: %w", err)
+		}
+		tokenStr = string(token)
 	}
 
-	var lastError string
-	if tb.LastError != nil {
-		lastError = *tb.LastError
+	bot := &telegram_bot.TelegramBot{
+		ID:         id,
+		BotID:      pgtypeToInt64(tb.BotID),
+		Token:      tokenStr,
+		Username:   tb.Username,
+		FirstName:  pgtypeToString(tb.FirstName),
+		LastName:   pgtypeToString(tb.LastName),
+		RevokedAt:  pgtypeToTime(tb.RevokedAt),
+		DisabledAt: pgtypeToTime(tb.DisabledAt),
 	}
-
-	return &telegram_bot.TelegramBot{
-		ID:                0,
-		EncryptedToken:    tb.EncryptedToken,
-		EncryptionVersion: int(tb.EncryptionVersion),
-		Username:          tb.Username,
-		FirstName:         firstName,
-		BotID:             botID,
-		OwnerID:           0,
-		Status:            tb.Status,
-		LastError:         lastError,
-		LastCheckedAt:     pgtypeToTime(tb.LastCheckedAt),
-		RevokedAt:         pgtypeToTime(tb.RevokedAt),
-		CreatedAt:         pgtypeToTime(tb.CreatedAt),
-		UpdatedAt:         pgtypeToTime(tb.UpdatedAt),
-	}, nil
+	return bot, nil
 }

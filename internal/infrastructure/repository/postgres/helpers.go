@@ -77,3 +77,21 @@ func timePtrToPgtype(t *time.Time) pgtype.Timestamp {
 func emptyJSONObject() []byte {
 	return []byte("{}")
 }
+
+// pgtype helpers for nullable primitive types
+
+// pgtypeToInt64 converts *int64 (sqlc nullable) to int64 with zero default.
+func pgtypeToInt64(v *int64) int64 {
+	if v == nil {
+		return 0
+	}
+	return *v
+}
+
+// pgtypeToString converts *string (sqlc nullable) to string with empty default.
+func pgtypeToString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}

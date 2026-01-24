@@ -17,11 +17,12 @@ CREATE TABLE telegram_bots (
     bot_id BIGINT,
     username TEXT NOT NULL,
     first_name TEXT,
+    last_name TEXT,
     encrypted_token BYTEA NOT NULL,
     encryption_version INT NOT NULL,
-    "status" TEXT NOT NULL,
     last_error TEXT,
     last_checked_at TIMESTAMP,
+    disabled_at TIMESTAMP,
     revoked_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()

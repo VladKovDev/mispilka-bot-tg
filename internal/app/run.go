@@ -31,7 +31,7 @@ func NewApp(cfg *config.Config, pool *postgres.Pool, logger logger.Logger, keySt
 	}
 	var telegramBotRepo telegram_bot.Repository
 	if pool != nil && pool.Pool != nil {
-		telegramBotRepo = postgres.NewPostgresTelegramBotRepository(pool.Pool)
+		telegramBotRepo = postgres.NewPostgresTelegramBotRepository(pool.Pool, keyStore)
 	}
 
 	return &App{
