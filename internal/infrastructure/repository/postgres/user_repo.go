@@ -36,7 +36,7 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *user.User) er
 		return fmt.Errorf("failed to create user: %w", err)
 	}
 
-	createdUser, err := toUserEntity(sqlcUser)
+	createdUser, err := r.toDomain(sqlcUser)
 	if err != nil {
 		return fmt.Errorf("failed to convert sqlcUser to user entity: %w", err)
 	}
@@ -51,7 +51,7 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, id uuid.UUID) (*us
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user by id: %w", err)
 	}
-	user, err := toUserEntity(sqlcUser)
+	user, err := r.toDomain(sqlcUser)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert sqlcUser to user entity: %w", err)
 	}
@@ -63,7 +63,7 @@ func (r *PostgresUserRepository) GetByTelegramID(ctx context.Context, telegramID
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user by telegram id: %w", err)
 	}
-	user, err := toUserEntity(sqlcUser)
+	user, err := r.toDomain(sqlcUser)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert sqlcUser to user entity: %w", err)
 	}
@@ -126,7 +126,7 @@ func (r *PostgresUserRepository) ListAll(ctx context.Context, limit, offset int)
 
 	var users []*user.User
 	for _, sqlcUser := range sqlcUsers {
-		user, err := toUserEntity(sqlcUser)
+		user, err := r.toDomain(sqlcUser)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert sqlcUser to user entity: %w", err)
 		}
@@ -135,7 +135,7 @@ func (r *PostgresUserRepository) ListAll(ctx context.Context, limit, offset int)
 	return users, nil
 }
 
-func toUserEntity(sqlcUser sqlc.User) (*user.User, error) {
+func (r *PostgresUserRepository)toDomain(sqlcUser sqlc.User) (*user.User, error) {
 	id, err := pgtypeToUUID(sqlcUser.ID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid user ID: %w", err)
@@ -148,8 +148,6 @@ func toUserEntity(sqlcUser sqlc.User) (*user.User, error) {
 		FirstName:  *sqlcUser.FirstName,
 		LastName:   *sqlcUser.LastName,
 		IsActive:   sqlcUser.IsActive,
-		CreatedAt:  pgtypeToTime(sqlcUser.CreatedAt),
-		BlockedAt:  pgtypeToTime(sqlcUser.BlockedAt),
 	}
 	return user, nil
 }
