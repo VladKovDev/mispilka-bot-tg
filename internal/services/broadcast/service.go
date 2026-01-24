@@ -11,15 +11,6 @@ import (
 	domainBroadcast "mispilkabot/internal/domain/broadcast"
 )
 
-var (
-	// ErrBroadcastNotFound is returned when a broadcast doesn't exist
-	ErrBroadcastNotFound = errors.New("broadcast not found")
-	// ErrBroadcastLoadFailed is returned when loading broadcasts fails
-	ErrBroadcastLoadFailed = errors.New("failed to load broadcasts")
-	// ErrBroadcastSaveFailed is returned when saving broadcasts fails
-	ErrBroadcastSaveFailed = errors.New("failed to save broadcasts")
-)
-
 // Service manages broadcast operations
 type Service struct {
 	filePath string
@@ -47,11 +38,11 @@ func (s *Service) Load() error {
 			s.registry = domainBroadcast.NewBroadcastRegistry()
 			return nil
 		}
-		return ErrBroadcastLoadFailed
+		return ErrLoadFailed
 	}
 
 	if err := json.Unmarshal(data, s.registry); err != nil {
-		return ErrBroadcastLoadFailed
+		return ErrLoadFailed
 	}
 
 	return nil
@@ -69,16 +60,16 @@ func (s *Service) Save() error {
 func (s *Service) saveLocked() error {
 	// Ensure directory exists
 	if err := os.MkdirAll(filepath.Dir(s.filePath), 0755); err != nil {
-		return ErrBroadcastSaveFailed
+		return ErrSaveFailed
 	}
 
 	data, err := json.MarshalIndent(s.registry, "", "  ")
 	if err != nil {
-		return ErrBroadcastSaveFailed
+		return ErrSaveFailed
 	}
 
 	if err := os.WriteFile(s.filePath, data, 0644); err != nil {
-		return ErrBroadcastSaveFailed
+		return ErrSaveFailed
 	}
 
 	return nil
@@ -92,11 +83,11 @@ func (s *Service) loadLocked() error {
 			s.registry = domainBroadcast.NewBroadcastRegistry()
 			return nil
 		}
-		return ErrBroadcastLoadFailed
+		return ErrLoadFailed
 	}
 
 	if err := json.Unmarshal(data, s.registry); err != nil {
-		return ErrBroadcastLoadFailed
+		return ErrLoadFailed
 	}
 
 	return nil
@@ -133,9 +124,8 @@ func (s *Service) CreateBroadcast(req *CreateBroadcastRequest) (*domainBroadcast
 
 // GetBroadcast retrieves a broadcast by ID
 func (s *Service) GetBroadcast(id string) (*domainBroadcast.Broadcast, error) {
-	if err := s.Load(); err != nil {
-		return nil, err
-	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	broadcast, exists := s.registry.Get(id)
 	if !exists {
@@ -147,9 +137,8 @@ func (s *Service) GetBroadcast(id string) (*domainBroadcast.Broadcast, error) {
 
 // ListBroadcasts returns all broadcasts
 func (s *Service) ListBroadcasts() ([]*domainBroadcast.Broadcast, error) {
-	if err := s.Load(); err != nil {
-		return nil, err
-	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	return s.registry.List(), nil
 }
