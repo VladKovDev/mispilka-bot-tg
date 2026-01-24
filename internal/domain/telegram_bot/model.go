@@ -13,6 +13,11 @@ type TelegramBot struct {
 	Username   string
 	FirstName  string
 	LastName   string
-	RevokedAt  time.Time
-	DisabledAt time.Time
+	Role       string
+	RevokedAt  *time.Time
+	DisabledAt *time.Time
+}
+
+func (tb *TelegramBot) IsActive() bool {
+	return tb.RevokedAt == nil && tb.DisabledAt == nil
 }

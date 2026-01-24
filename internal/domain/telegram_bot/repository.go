@@ -13,3 +13,7 @@ type Repository interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	ListAll(ctx context.Context) ([]*TelegramBot, error)
 }
+
+type BotRegistry interface {
+	Get(botID int64) (*TelegramBot, error)
+}

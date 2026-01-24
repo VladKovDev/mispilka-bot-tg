@@ -114,6 +114,7 @@ type TelegramBot struct {
 	Username          string           `json:"username"`
 	FirstName         *string          `json:"first_name"`
 	LastName          *string          `json:"last_name"`
+	Role              string           `json:"role"`
 	EncryptedToken    []byte           `json:"encrypted_token"`
 	EncryptionVersion int32            `json:"encryption_version"`
 	LastError         *string          `json:"last_error"`

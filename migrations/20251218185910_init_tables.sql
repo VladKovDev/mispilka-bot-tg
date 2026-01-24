@@ -18,6 +18,7 @@ CREATE TABLE telegram_bots (
     username TEXT NOT NULL,
     first_name TEXT,
     last_name TEXT,
+    "role" TEXT NOT NULL CHECK (role IN ('admin', 'general')),
     encrypted_token BYTEA NOT NULL,
     encryption_version INT NOT NULL,
     last_error TEXT,

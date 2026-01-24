@@ -12,18 +12,18 @@ import (
 
 type Querier interface {
 	CountUsers(ctx context.Context) (int64, error)
-	CreateTelegramBot(ctx context.Context, arg CreateTelegramBotParams) (TelegramBot, error)
+	CreateTelegramBot(ctx context.Context, arg CreateTelegramBotParams) (CreateTelegramBotRow, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeactivateUser(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
 	DeleteTelegramBot(ctx context.Context, id pgtype.UUID) error
 	DeleteUser(ctx context.Context, id pgtype.UUID) error
-	GetTelegramBotByBotID(ctx context.Context, botID *int64) (TelegramBot, error)
-	GetTelegramBotByID(ctx context.Context, id pgtype.UUID) (TelegramBot, error)
+	GetTelegramBotByBotID(ctx context.Context, botID *int64) (GetTelegramBotByBotIDRow, error)
+	GetTelegramBotByID(ctx context.Context, id pgtype.UUID) (GetTelegramBotByIDRow, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserByTelegramID(ctx context.Context, telegramID *int64) (User, error)
-	ListTelegramBots(ctx context.Context) ([]TelegramBot, error)
+	ListTelegramBots(ctx context.Context) ([]ListTelegramBotsRow, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
-	UpdateTelegramBot(ctx context.Context, arg UpdateTelegramBotParams) (TelegramBot, error)
+	UpdateTelegramBot(ctx context.Context, arg UpdateTelegramBotParams) (UpdateTelegramBotRow, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UserExistsByTelegramID(ctx context.Context, telegramID *int64) (bool, error)
 }

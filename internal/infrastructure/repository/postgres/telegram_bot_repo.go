@@ -9,6 +9,7 @@ import (
 	"github.com/VladKovDev/promo-bot/internal/infrastructure/crypto"
 	"github.com/VladKovDev/promo-bot/internal/infrastructure/repository/postgres/sqlc"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -53,10 +54,11 @@ func (r *PostgresTelegramBotRepository) Create(ctx context.Context, bot *telegra
 		LastName:          lastName,
 		EncryptedToken:    encryptedToken,
 		EncryptionVersion: int32(r.keyStore.Current),
+		Role:              bot.Role,
 		LastError:         nil,
 		LastCheckedAt:     timeToPgtype(time.Time{}),
-		RevokedAt:         timeToPgtype(bot.RevokedAt),
-		DisabledAt:        timeToPgtype(bot.DisabledAt),
+		RevokedAt:         timePtrToPgtype(bot.RevokedAt),
+		DisabledAt:        timePtrToPgtype(bot.DisabledAt),
 	}
 
 	created, err := r.queries.CreateTelegramBot(ctx, params)
@@ -64,7 +66,7 @@ func (r *PostgresTelegramBotRepository) Create(ctx context.Context, bot *telegra
 		return fmt.Errorf("failed to create telegram bot: %w", err)
 	}
 
-	createdBot, err := r.toDomain(created)
+	createdBot, err := telegramBotFromRow(r, created)
 	if err != nil {
 		return fmt.Errorf("failed to map created telegram bot: %w", err)
 	}
@@ -77,7 +79,7 @@ func (r *PostgresTelegramBotRepository) GetByID(ctx context.Context, id uuid.UUI
 	if err != nil {
 		return nil, fmt.Errorf("failed to get telegram bot by id: %w", err)
 	}
-	return r.toDomain(tb)
+	return telegramBotFromRow(r, tb)
 }
 
 func (r *PostgresTelegramBotRepository) GetByTelegramID(ctx context.Context, telegramID int64) (*telegram_bot.TelegramBot, error) {
@@ -85,7 +87,7 @@ func (r *PostgresTelegramBotRepository) GetByTelegramID(ctx context.Context, tel
 	if err != nil {
 		return nil, fmt.Errorf("failed to get telegram bot by telegram id: %w", err)
 	}
-	return r.toDomain(tb)
+	return telegramBotFromRow(r, tb)
 }
 
 func (r *PostgresTelegramBotRepository) Update(ctx context.Context, bot *telegram_bot.TelegramBot) error {
@@ -117,10 +119,11 @@ func (r *PostgresTelegramBotRepository) Update(ctx context.Context, bot *telegra
 		LastName:          lastName,
 		EncryptedToken:    encryptedToken,
 		EncryptionVersion: int32(r.keyStore.Current),
+		Role:              bot.Role,
 		LastError:         nil,
 		LastCheckedAt:     timeToPgtype(time.Time{}),
-		RevokedAt:         timeToPgtype(bot.RevokedAt),
-		DisabledAt:        timeToPgtype(bot.DisabledAt),
+		RevokedAt:         timePtrToPgtype(bot.RevokedAt),
+		DisabledAt:        timePtrToPgtype(bot.DisabledAt),
 	}
 
 	updated, err := r.queries.UpdateTelegramBot(ctx, params)
@@ -128,7 +131,7 @@ func (r *PostgresTelegramBotRepository) Update(ctx context.Context, bot *telegra
 		return fmt.Errorf("failed to update telegram bot: %w", err)
 	}
 
-	updatedBot, err := r.toDomain(updated)
+	updatedBot, err := telegramBotFromRow(r, updated)
 	if err != nil {
 		return fmt.Errorf("failed to map updated telegram bot: %w", err)
 	}
@@ -151,7 +154,7 @@ func (r *PostgresTelegramBotRepository) ListAll(ctx context.Context) ([]*telegra
 	}
 	var bots []*telegram_bot.TelegramBot
 	for _, it := range items {
-		b, err := r.toDomain(it)
+		b, err := telegramBotFromRow(r, it)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert telegram bot: %w", err)
 		}
@@ -160,34 +163,124 @@ func (r *PostgresTelegramBotRepository) ListAll(ctx context.Context) ([]*telegra
 	return bots, nil
 }
 
-func (r *PostgresTelegramBotRepository) toDomain(tb sqlc.TelegramBot) (*telegram_bot.TelegramBot, error) {
-	id, err := pgtypeToUUID(tb.ID)
+func telegramBotFromRow[T sqlc.TelegramBot | sqlc.CreateTelegramBotRow | sqlc.UpdateTelegramBotRow | sqlc.ListTelegramBotsRow | sqlc.GetTelegramBotByBotIDRow | sqlc.GetTelegramBotByIDRow](
+	r *PostgresTelegramBotRepository,
+	 row T,
+	 ) (*telegram_bot.TelegramBot, error) {
+	var (
+		id pgtype.UUID
+		botID *int64
+		username string
+		firstName *string
+		lastName *string
+		encryptedToken []byte
+		encryptionVersion int32
+		role string
+		revokedAt pgtype.Timestamp
+		disabledAt pgtype.Timestamp
+	)
+	switch v := any(row).(type) {
+	case sqlc.TelegramBot:
+		id = v.ID
+		botID = v.BotID
+		username = v.Username
+		firstName = v.FirstName
+		lastName = v.LastName
+		encryptedToken = v.EncryptedToken
+		encryptionVersion = v.EncryptionVersion
+		role = v.Role
+		revokedAt = v.RevokedAt
+		disabledAt = v.DisabledAt
+	case sqlc.CreateTelegramBotRow:
+		id = v.ID
+		botID = v.BotID
+		username = v.Username
+		firstName = v.FirstName
+		lastName = v.LastName
+		encryptedToken = v.EncryptedToken
+		encryptionVersion = v.EncryptionVersion
+		role = v.Role
+		revokedAt = v.RevokedAt
+		disabledAt = v.DisabledAt
+	case sqlc.UpdateTelegramBotRow:
+		id = v.ID
+		botID = v.BotID
+		username = v.Username
+		firstName = v.FirstName
+		lastName = v.LastName
+		encryptedToken = v.EncryptedToken
+		encryptionVersion = v.EncryptionVersion
+		role = v.Role
+		revokedAt = v.RevokedAt
+		disabledAt = v.DisabledAt
+	case sqlc.ListTelegramBotsRow:
+		id = v.ID
+		botID = v.BotID
+		username = v.Username
+		firstName = v.FirstName
+		lastName = v.LastName
+		encryptedToken = v.EncryptedToken
+		encryptionVersion = v.EncryptionVersion
+		role = v.Role
+		revokedAt = v.RevokedAt
+		disabledAt = v.DisabledAt
+	case sqlc.GetTelegramBotByBotIDRow:
+		id = v.ID
+		botID = v.BotID
+		username = v.Username
+		firstName = v.FirstName
+		lastName = v.LastName
+		encryptedToken = v.EncryptedToken
+		encryptionVersion = v.EncryptionVersion
+		role = v.Role
+		revokedAt = v.RevokedAt
+		disabledAt = v.DisabledAt
+	case sqlc.GetTelegramBotByIDRow:
+		id = v.ID
+		botID = v.BotID
+		username = v.Username
+		firstName = v.FirstName
+		lastName = v.LastName
+		encryptedToken = v.EncryptedToken
+		encryptionVersion = v.EncryptionVersion
+		role = v.Role
+		revokedAt = v.RevokedAt
+		disabledAt = v.DisabledAt
+	default:
+		return nil, fmt.Errorf("unsupported row type")
+	}
+
+	domainId, err := pgtypeToUUID(id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert telegram bot ID: %w", err)
 	}
 
 	var tokenStr string
-	if len(tb.EncryptedToken) > 0 {
-		enc, ok := r.keyStore.Encryptors[int(tb.EncryptionVersion)]
+	if len(encryptedToken) > 0 {
+		enc, ok := r.keyStore.Encryptors[int(encryptionVersion)]
 		if !ok {
-			return nil, fmt.Errorf("unknown encryption version: %d", tb.EncryptionVersion)
+			return nil, fmt.Errorf("unknown encryption version: %d", encryptionVersion)
 		}
-		token, err := enc.Decrypt(tb.EncryptedToken)
+		token, err := enc.Decrypt(encryptedToken)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decrypt telegram bot token: %w", err)
 		}
 		tokenStr = string(token)
 	}
 
+	domainRevokedAt := pgtypeToTime(revokedAt)
+	domainDisabledAt := pgtypeToTime(disabledAt)
+
 	bot := &telegram_bot.TelegramBot{
-		ID:         id,
-		BotID:      pgtypeToInt64(tb.BotID),
+		ID:        domainId,
+		BotID:      pgtypeToInt64(botID),
 		Token:      tokenStr,
-		Username:   tb.Username,
-		FirstName:  pgtypeToString(tb.FirstName),
-		LastName:   pgtypeToString(tb.LastName),
-		RevokedAt:  pgtypeToTime(tb.RevokedAt),
-		DisabledAt: pgtypeToTime(tb.DisabledAt),
+		Username:   username,
+		FirstName:  pgtypeToString(firstName),
+		LastName:   pgtypeToString(lastName),
+		Role:       role,
+		RevokedAt:  &domainRevokedAt,
+		DisabledAt: &domainDisabledAt,
 	}
 	return bot, nil
 }

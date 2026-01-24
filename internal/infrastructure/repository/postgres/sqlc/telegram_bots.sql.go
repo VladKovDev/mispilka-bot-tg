@@ -20,6 +20,7 @@ INSERT INTO
         last_name,
         encrypted_token,
         encryption_version,
+        "role",
         last_error,
         last_checked_at,
         revoked_at,
@@ -36,7 +37,8 @@ VALUES
         $7,
         $8,
         $9,
-        $10
+        $10,
+        $11
     ) RETURNING id,
     bot_id,
     username,
@@ -44,6 +46,7 @@ VALUES
     last_name,
     encrypted_token,
     encryption_version,
+    "role",
     last_error,
     last_checked_at,
     disabled_at,
@@ -59,13 +62,31 @@ type CreateTelegramBotParams struct {
 	LastName          *string          `json:"last_name"`
 	EncryptedToken    []byte           `json:"encrypted_token"`
 	EncryptionVersion int32            `json:"encryption_version"`
+	Role              string           `json:"role"`
 	LastError         *string          `json:"last_error"`
 	LastCheckedAt     pgtype.Timestamp `json:"last_checked_at"`
 	RevokedAt         pgtype.Timestamp `json:"revoked_at"`
 	DisabledAt        pgtype.Timestamp `json:"disabled_at"`
 }
 
-func (q *Queries) CreateTelegramBot(ctx context.Context, arg CreateTelegramBotParams) (TelegramBot, error) {
+type CreateTelegramBotRow struct {
+	ID                pgtype.UUID      `json:"id"`
+	BotID             *int64           `json:"bot_id"`
+	Username          string           `json:"username"`
+	FirstName         *string          `json:"first_name"`
+	LastName          *string          `json:"last_name"`
+	EncryptedToken    []byte           `json:"encrypted_token"`
+	EncryptionVersion int32            `json:"encryption_version"`
+	Role              string           `json:"role"`
+	LastError         *string          `json:"last_error"`
+	LastCheckedAt     pgtype.Timestamp `json:"last_checked_at"`
+	DisabledAt        pgtype.Timestamp `json:"disabled_at"`
+	RevokedAt         pgtype.Timestamp `json:"revoked_at"`
+	CreatedAt         pgtype.Timestamp `json:"created_at"`
+	UpdatedAt         pgtype.Timestamp `json:"updated_at"`
+}
+
+func (q *Queries) CreateTelegramBot(ctx context.Context, arg CreateTelegramBotParams) (CreateTelegramBotRow, error) {
 	row := q.db.QueryRow(ctx, createTelegramBot,
 		arg.BotID,
 		arg.Username,
@@ -73,12 +94,13 @@ func (q *Queries) CreateTelegramBot(ctx context.Context, arg CreateTelegramBotPa
 		arg.LastName,
 		arg.EncryptedToken,
 		arg.EncryptionVersion,
+		arg.Role,
 		arg.LastError,
 		arg.LastCheckedAt,
 		arg.RevokedAt,
 		arg.DisabledAt,
 	)
-	var i TelegramBot
+	var i CreateTelegramBotRow
 	err := row.Scan(
 		&i.ID,
 		&i.BotID,
@@ -87,6 +109,7 @@ func (q *Queries) CreateTelegramBot(ctx context.Context, arg CreateTelegramBotPa
 		&i.LastName,
 		&i.EncryptedToken,
 		&i.EncryptionVersion,
+		&i.Role,
 		&i.LastError,
 		&i.LastCheckedAt,
 		&i.DisabledAt,
@@ -118,6 +141,7 @@ SELECT
     last_name,
     encrypted_token,
     encryption_version,
+    "role",
     last_error,
     last_checked_at,
     disabled_at,
@@ -130,9 +154,26 @@ WHERE
     bot_id = $1
 `
 
-func (q *Queries) GetTelegramBotByBotID(ctx context.Context, botID *int64) (TelegramBot, error) {
+type GetTelegramBotByBotIDRow struct {
+	ID                pgtype.UUID      `json:"id"`
+	BotID             *int64           `json:"bot_id"`
+	Username          string           `json:"username"`
+	FirstName         *string          `json:"first_name"`
+	LastName          *string          `json:"last_name"`
+	EncryptedToken    []byte           `json:"encrypted_token"`
+	EncryptionVersion int32            `json:"encryption_version"`
+	Role              string           `json:"role"`
+	LastError         *string          `json:"last_error"`
+	LastCheckedAt     pgtype.Timestamp `json:"last_checked_at"`
+	DisabledAt        pgtype.Timestamp `json:"disabled_at"`
+	RevokedAt         pgtype.Timestamp `json:"revoked_at"`
+	CreatedAt         pgtype.Timestamp `json:"created_at"`
+	UpdatedAt         pgtype.Timestamp `json:"updated_at"`
+}
+
+func (q *Queries) GetTelegramBotByBotID(ctx context.Context, botID *int64) (GetTelegramBotByBotIDRow, error) {
 	row := q.db.QueryRow(ctx, getTelegramBotByBotID, botID)
-	var i TelegramBot
+	var i GetTelegramBotByBotIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.BotID,
@@ -141,6 +182,7 @@ func (q *Queries) GetTelegramBotByBotID(ctx context.Context, botID *int64) (Tele
 		&i.LastName,
 		&i.EncryptedToken,
 		&i.EncryptionVersion,
+		&i.Role,
 		&i.LastError,
 		&i.LastCheckedAt,
 		&i.DisabledAt,
@@ -160,6 +202,7 @@ SELECT
     last_name,
     encrypted_token,
     encryption_version,
+    "role",
     last_error,
     last_checked_at,
     disabled_at,
@@ -172,9 +215,26 @@ WHERE
     id = $1
 `
 
-func (q *Queries) GetTelegramBotByID(ctx context.Context, id pgtype.UUID) (TelegramBot, error) {
+type GetTelegramBotByIDRow struct {
+	ID                pgtype.UUID      `json:"id"`
+	BotID             *int64           `json:"bot_id"`
+	Username          string           `json:"username"`
+	FirstName         *string          `json:"first_name"`
+	LastName          *string          `json:"last_name"`
+	EncryptedToken    []byte           `json:"encrypted_token"`
+	EncryptionVersion int32            `json:"encryption_version"`
+	Role              string           `json:"role"`
+	LastError         *string          `json:"last_error"`
+	LastCheckedAt     pgtype.Timestamp `json:"last_checked_at"`
+	DisabledAt        pgtype.Timestamp `json:"disabled_at"`
+	RevokedAt         pgtype.Timestamp `json:"revoked_at"`
+	CreatedAt         pgtype.Timestamp `json:"created_at"`
+	UpdatedAt         pgtype.Timestamp `json:"updated_at"`
+}
+
+func (q *Queries) GetTelegramBotByID(ctx context.Context, id pgtype.UUID) (GetTelegramBotByIDRow, error) {
 	row := q.db.QueryRow(ctx, getTelegramBotByID, id)
-	var i TelegramBot
+	var i GetTelegramBotByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.BotID,
@@ -183,6 +243,7 @@ func (q *Queries) GetTelegramBotByID(ctx context.Context, id pgtype.UUID) (Teleg
 		&i.LastName,
 		&i.EncryptedToken,
 		&i.EncryptionVersion,
+		&i.Role,
 		&i.LastError,
 		&i.LastCheckedAt,
 		&i.DisabledAt,
@@ -202,6 +263,7 @@ SELECT
     last_name,
     encrypted_token,
     encryption_version,
+    "role",
     last_error,
     last_checked_at,
     disabled_at,
@@ -214,15 +276,32 @@ ORDER BY
     created_at DESC
 `
 
-func (q *Queries) ListTelegramBots(ctx context.Context) ([]TelegramBot, error) {
+type ListTelegramBotsRow struct {
+	ID                pgtype.UUID      `json:"id"`
+	BotID             *int64           `json:"bot_id"`
+	Username          string           `json:"username"`
+	FirstName         *string          `json:"first_name"`
+	LastName          *string          `json:"last_name"`
+	EncryptedToken    []byte           `json:"encrypted_token"`
+	EncryptionVersion int32            `json:"encryption_version"`
+	Role              string           `json:"role"`
+	LastError         *string          `json:"last_error"`
+	LastCheckedAt     pgtype.Timestamp `json:"last_checked_at"`
+	DisabledAt        pgtype.Timestamp `json:"disabled_at"`
+	RevokedAt         pgtype.Timestamp `json:"revoked_at"`
+	CreatedAt         pgtype.Timestamp `json:"created_at"`
+	UpdatedAt         pgtype.Timestamp `json:"updated_at"`
+}
+
+func (q *Queries) ListTelegramBots(ctx context.Context) ([]ListTelegramBotsRow, error) {
 	rows, err := q.db.Query(ctx, listTelegramBots)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []TelegramBot{}
+	items := []ListTelegramBotsRow{}
 	for rows.Next() {
-		var i TelegramBot
+		var i ListTelegramBotsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.BotID,
@@ -231,6 +310,7 @@ func (q *Queries) ListTelegramBots(ctx context.Context) ([]TelegramBot, error) {
 			&i.LastName,
 			&i.EncryptedToken,
 			&i.EncryptionVersion,
+			&i.Role,
 			&i.LastError,
 			&i.LastCheckedAt,
 			&i.DisabledAt,
@@ -258,10 +338,11 @@ SET
     last_name = $4,
     encrypted_token = $5,
     encryption_version = $6,
-    last_error = $7,
-    last_checked_at = $8,
-    revoked_at = $9,
-    disabled_at = $10,
+    "role" = $7,
+    last_error = $8,
+    last_checked_at = $9,
+    revoked_at = $10,
+    disabled_at = $11,
     updated_at = NOW()
 WHERE
     bot_id = $1 RETURNING id,
@@ -271,6 +352,7 @@ WHERE
     last_name,
     encrypted_token,
     encryption_version,
+    "role",
     last_error,
     last_checked_at,
     disabled_at,
@@ -286,13 +368,31 @@ type UpdateTelegramBotParams struct {
 	LastName          *string          `json:"last_name"`
 	EncryptedToken    []byte           `json:"encrypted_token"`
 	EncryptionVersion int32            `json:"encryption_version"`
+	Role              string           `json:"role"`
 	LastError         *string          `json:"last_error"`
 	LastCheckedAt     pgtype.Timestamp `json:"last_checked_at"`
 	RevokedAt         pgtype.Timestamp `json:"revoked_at"`
 	DisabledAt        pgtype.Timestamp `json:"disabled_at"`
 }
 
-func (q *Queries) UpdateTelegramBot(ctx context.Context, arg UpdateTelegramBotParams) (TelegramBot, error) {
+type UpdateTelegramBotRow struct {
+	ID                pgtype.UUID      `json:"id"`
+	BotID             *int64           `json:"bot_id"`
+	Username          string           `json:"username"`
+	FirstName         *string          `json:"first_name"`
+	LastName          *string          `json:"last_name"`
+	EncryptedToken    []byte           `json:"encrypted_token"`
+	EncryptionVersion int32            `json:"encryption_version"`
+	Role              string           `json:"role"`
+	LastError         *string          `json:"last_error"`
+	LastCheckedAt     pgtype.Timestamp `json:"last_checked_at"`
+	DisabledAt        pgtype.Timestamp `json:"disabled_at"`
+	RevokedAt         pgtype.Timestamp `json:"revoked_at"`
+	CreatedAt         pgtype.Timestamp `json:"created_at"`
+	UpdatedAt         pgtype.Timestamp `json:"updated_at"`
+}
+
+func (q *Queries) UpdateTelegramBot(ctx context.Context, arg UpdateTelegramBotParams) (UpdateTelegramBotRow, error) {
 	row := q.db.QueryRow(ctx, updateTelegramBot,
 		arg.BotID,
 		arg.Username,
@@ -300,12 +400,13 @@ func (q *Queries) UpdateTelegramBot(ctx context.Context, arg UpdateTelegramBotPa
 		arg.LastName,
 		arg.EncryptedToken,
 		arg.EncryptionVersion,
+		arg.Role,
 		arg.LastError,
 		arg.LastCheckedAt,
 		arg.RevokedAt,
 		arg.DisabledAt,
 	)
-	var i TelegramBot
+	var i UpdateTelegramBotRow
 	err := row.Scan(
 		&i.ID,
 		&i.BotID,
@@ -314,6 +415,7 @@ func (q *Queries) UpdateTelegramBot(ctx context.Context, arg UpdateTelegramBotPa
 		&i.LastName,
 		&i.EncryptedToken,
 		&i.EncryptionVersion,
+		&i.Role,
 		&i.LastError,
 		&i.LastCheckedAt,
 		&i.DisabledAt,

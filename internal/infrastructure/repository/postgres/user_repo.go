@@ -135,7 +135,7 @@ func (r *PostgresUserRepository) ListAll(ctx context.Context, limit, offset int)
 	return users, nil
 }
 
-func (r *PostgresUserRepository)toDomain(sqlcUser sqlc.User) (*user.User, error) {
+func (r *PostgresUserRepository) toDomain(sqlcUser sqlc.User) (*user.User, error) {
 	id, err := pgtypeToUUID(sqlcUser.ID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid user ID: %w", err)
