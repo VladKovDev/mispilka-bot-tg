@@ -9,6 +9,7 @@ var (
 	ErrInvalidProductPrice   = errors.New("invalid product price")
 	ErrInvalidPrivateGroupID = errors.New("invalid private group ID")
 	ErrScenarioNotFound      = errors.New("scenario not found")
+	ErrMessageNotFound       = errors.New("message not found")
 )
 
 // ScenarioStatus represents user's status in a scenario
