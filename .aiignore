@@ -1,0 +1,30 @@
+# Build outputs
+.bin/
+app
+
+# Data files (keep only README and examples)
+data/*
+!data/README.md
+!data/example/
+!data/example/**
+
+# Development artifacts
+.vscode/
+.idea/
+*.log
+.serena
+.bv/
+.ruff_cache/
+
+# Environment
+.env
+.env.local
+
+# Generated files
+*.pb.go
+
+# Cache
+.claude/.cache/
+
+# AI tool outputs (keep .aiready/ for tracking)
+.tmp/current/

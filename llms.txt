@@ -1,0 +1,93 @@
+# mispilka-bot-tg - Go Telegram Bot
+
+> Premium invite-only Telegram group bot with payment integration via Prodamus
+
+## Project Overview
+
+**Language**: Go 1.22.2
+**Framework**: github.com/go-telegram-bot-api/telegram-bot-api/v5
+**Purpose**: Manages invite-only Telegram groups with paid access via payment processing
+
+## Architecture
+
+Clean Architecture with DDD-lite:
+
+```
+mispilka-bot-tg/
+├── cmd/app/main.go          # Entry point
+├── config/                  # Configuration loading
+├── internal/
+│   ├── domain/command/      # Domain: Command entities and registry
+│   ├── logger/              # Logging utility
+│   ├── models/              # Data models (prodamus)
+│   ├── server/              # HTTP server and webhooks
+│   │   └── prodamus/        # Payment webhook handler
+│   ├── services/            # Business logic layer
+│   │   ├── payment/         # Payment processing
+│   │   ├── hmac/            # Security utilities
+│   │   ├── users.go         # User management
+│   │   ├── invite.go        # Invite link generation
+│   │   ├── messages.go      # Message templates
+│   │   ├── storage.go       # JSON file storage
+│   │   ├── prodamus.go      # Payment integration
+│   │   └── scheduler.go     # Scheduled tasks
+│   └── telegram/            # Telegram bot layer
+│       ├── bot.go           # Bot core
+│       ├── handlers.go      # Command handlers
+│       ├── command_service.go
+│       └── command_mapper.go
+├── data/                    # Runtime data (JSON storage)
+│   ├── example/             # Example templates
+│   └── messages/            # Message templates
+└── docs/                    # Documentation
+    ├── features/            # Feature specs
+    ├── decisions/           # ADRs
+    └── api/                 # API docs
+```
+
+## Key Dependencies
+
+- `github.com/go-telegram-bot-api/telegram-bot-api/v5` - Telegram Bot API
+- `github.com/joho/godotenv` - Environment configuration
+
+## Entry Points
+
+1. **Main**: `cmd/app/main.go` - Initializes bot, starts HTTP server, handles graceful shutdown
+2. **Bot Commands**: `internal/telegram/handlers.go` - Handles /start, /help, /invite, etc.
+3. **Webhook**: `internal/server/prodamus/webhook.go` - Receives payment notifications
+
+## Service Layer Summary
+
+| Service | File | Responsibility |
+|---------|------|-----------------|
+| User | `services/users.go` | User registration, storage |
+| Payment | `services/payment/` | Payment processing, validation |
+| Invite | `services/invite.go` | Invite link generation, expiry |
+| Messages | `services/messages.go` | Template rendering |
+| Storage | `services/storage.go` | JSON file persistence |
+| Scheduler | `services/scheduler.go` | Scheduled task execution |
+
+## Configuration
+
+Environment variables (see `.env.example`):
+- `BOT_TOKEN` - Telegram bot token
+- `BOT_DEBUG` - Enable debug logging
+- Server port and webhook URL
+
+## Data Flow
+
+1. User sends /start → Bot registers user
+2. User requests invite → Bot checks payment status
+3. Payment via Prodamus → Webhook confirms payment
+4. Bot generates invite link → User joins group
+5. Group join/leave events → Bot manages access
+
+## Agent Instructions
+
+- **CLAUDE.md** - Main orchestration rules, agent delegation pattern
+- **AGENTS.md** - Health workflow agents, specialized workers
+- **Beads** - Task tracking (run `bd prime` on session start)
+
+## Quality Gates
+
+Run before committing: `bash .claude/scripts/verify.sh`
