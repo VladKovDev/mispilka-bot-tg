@@ -15,14 +15,19 @@ import (
 )
 
 type Bot struct {
-	bot *tgbotapi.BotAPI
-	cfg *config.Config
+	bot            *tgbotapi.BotAPI
+	cfg            *config.Config
+	commandService *CommandService
 }
 
 type Media []interface{}
 
 func NewBot(bot *tgbotapi.BotAPI, cfg *config.Config) *Bot {
-	return &Bot{bot: bot, cfg: cfg}
+	return &Bot{
+		bot:            bot,
+		cfg:            cfg,
+		commandService: NewCommandService(bot),
+	}
 }
 
 // GenerateInviteLink creates a new invite link for the specified group
@@ -42,6 +47,11 @@ func (b *Bot) Request(c tgbotapi.Chattable) (tgbotapi.APIResponse, error) {
 		return tgbotapi.APIResponse{}, err
 	}
 	return *resp, nil
+}
+
+// RegisterCommands registers bot commands with Telegram API using role-based visibility
+func (b *Bot) RegisterCommands(ctx context.Context) error {
+	return b.commandService.RegisterCommands(ctx, b.cfg.AdminIDs)
 }
 
 func (b *Bot) Start(ctx context.Context) {

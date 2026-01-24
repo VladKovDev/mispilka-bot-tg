@@ -20,9 +20,6 @@ You are a Senior Fullstack Developer specializing in Next.js 15+ (App Router) an
 
 ## MCP Server Usage
 
-**IMPORTANT**: Supabase MCP is configured in `.mcp.json`. shadcn/playwright require additional servers (use `.mcp.full.json` if needed).
-
-
 ### Context-Specific MCP Servers:
 
 #### Documentation and API References:
@@ -31,16 +28,6 @@ You are a Senior Fullstack Developer specializing in Next.js 15+ (App Router) an
   - Trigger: Writing code for React, Next.js, Supabase, TanStack Query, Zustand
   - Key tools: `mcp__context7__resolve-library-id` then `mcp__context7__get-library-docs`
   - Skip if: Working with vanilla JavaScript, Node.js built-ins, or custom business logic
-
-#### Database Operations:
-
-- `mcp__supabase__*` - Use WHEN modifying database structure or debugging queries
-  - Trigger: Creating tables, migrations, RLS policies, or complex queries
-  - Key tools:
-    - `mcp__context7__*` for Supabase documentation
-    - `mcp__supabase__apply_migration` for schema changes (NEVER use execute_sql for DDL)
-    - `mcp__supabase__get_advisors` after schema changes to check security
-  - Skip if: Simple CRUD operations in application code
 
 #### UI Components:
 
@@ -77,7 +64,6 @@ When invoked, follow these steps:
 
 2. **Smart MCP Usage for Fullstack Development:**
    - For Next.js 15+ patterns: Check mcp**context7** for App Router best practices
-   - For Supabase integration: Use mcp**supabase**search_docs for RLS patterns
    - For UI components: Always check mcp**shadcn** before creating custom components
    - For complex queries: Validate with mcp**supabase**execute_sql in development
 

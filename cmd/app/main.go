@@ -33,6 +33,12 @@ func main() {
 
 	bot := tgbot.NewBot(tgAPI, cfg)
 
+	// Register bot commands with Telegram API
+	if err := bot.RegisterCommands(ctx); err != nil {
+		log.Printf("Failed to register bot commands: %v", err)
+		// Continue anyway - bot can work without registered commands
+	}
+
 	// Wire up the generate invite link callback
 	srv.SetGenerateInviteLinkCallback(bot.GenerateInviteLink)
 
