@@ -9,18 +9,45 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
+// User represents a user in the system
 type User struct {
-	UserName     string                 `json:"user_name"`
-	RegTime      time.Time              `json:"reg_time"`
-	IsMessaging  bool                   `json:"is_messaging"`
-	MessagesList []string               `json:"messages_list"`
-	PaymentDate  *time.Time             `json:"payment_date,omitempty"`
-	PaymentLink  string                 `json:"payment_link,omitempty"`
-	InviteLink   string                 `json:"invite_link,omitempty"`
-	JoinedGroup  bool                   `json:"joined_group,omitempty"`
-	JoinedAt     *time.Time             `json:"joined_at,omitempty"`
-	PaymentInfo  *models.WebhookPayload `json:"payment_info,omitempty"` // full webhook payload
+	UserName     string                         `json:"user_name"`
+	RegTime      time.Time                      `json:"reg_time"`
+	IsMessaging  bool                           `json:"is_messaging"`
+	Scenarios    map[string]*UserScenarioState  `json:"scenarios,omitempty"`
+	ActiveScenarioID    string                         `json:"active_scenario_id,omitempty"`
+	// Legacy fields for migration compatibility
+	MessagesList        []string                       `json:"messages_list,omitempty"`
+	PaymentDate         *time.Time                     `json:"payment_date,omitempty"`
+	PaymentLink         string                         `json:"payment_link,omitempty"`
+	InviteLink          string                         `json:"invite_link,omitempty"`
+	JoinedGroup         bool                           `json:"joined_group,omitempty"`
+	JoinedAt            *time.Time                     `json:"joined_at,omitempty"`
+	PaymentInfo         *models.WebhookPayload         `json:"payment_info,omitempty"`
 }
+
+// UserScenarioState tracks user's progress in a scenario
+type UserScenarioState struct {
+	Status              ScenarioStatus   `json:"status"`
+	CurrentMessageIndex int              `json:"current_message_index"`
+	LastSentAt          *time.Time       `json:"last_sent_at,omitempty"`
+	CompletedAt         *time.Time       `json:"completed_at,omitempty"`
+	PaymentDate         *time.Time       `json:"payment_date,omitempty"`
+	PaymentLink         string           `json:"payment_link,omitempty"`
+	InviteLink          string           `json:"invite_link,omitempty"`
+	JoinedGroup         bool             `json:"joined_group,omitempty"`
+	JoinedAt            *time.Time       `json:"joined_at,omitempty"`
+}
+
+// ScenarioStatus represents user's status in a scenario
+type ScenarioStatus string
+
+const (
+	StatusNotStarted ScenarioStatus = "not_started"
+	StatusActive     ScenarioStatus = "active"
+	StatusCompleted  ScenarioStatus = "completed"
+	StatusStopped    ScenarioStatus = "stopped"
+)
 
 type UserMap map[string]User
 
@@ -214,4 +241,90 @@ func GetAllUsers() (UserMap, error) {
 		return nil, fmt.Errorf("failed to load users: %w", err)
 	}
 	return users, nil
+}
+
+// GetUserScenario retrieves user's state for a specific scenario
+func GetUserScenario(chatID, scenarioID string) (*UserScenarioState, error) {
+	user, err := GetUser(chatID)
+	if err != nil {
+		return nil, err
+	}
+
+	if user.Scenarios == nil {
+		// Initialize with not_started state
+		return &UserScenarioState{Status: StatusNotStarted}, nil
+	}
+
+	state, ok := user.Scenarios[scenarioID]
+	if !ok {
+		return &UserScenarioState{Status: StatusNotStarted}, nil
+	}
+
+	return state, nil
+}
+
+// SetUserScenario sets user's state for a specific scenario
+func SetUserScenario(chatID, scenarioID string, state *UserScenarioState) error {
+	users, err := ReadJSONRetry[UserMap]("data/users.json", 3)
+	if err != nil {
+		return fmt.Errorf("failed to read users data: %w", err)
+	}
+
+	user, ok := users[chatID]
+	if !ok {
+		return fmt.Errorf("user not found")
+	}
+
+	if user.Scenarios == nil {
+		user.Scenarios = make(map[string]*UserScenarioState)
+	}
+
+	user.Scenarios[scenarioID] = state
+
+	return WriteJSONRetry("data/users.json", users, 3)
+}
+
+// GetUserActiveScenario retrieves user's active scenario
+func GetUserActiveScenario(chatID string) (string, *UserScenarioState, error) {
+	user, err := GetUser(chatID)
+	if err != nil {
+		return "", nil, err
+	}
+
+	if user.ActiveScenarioID == "" {
+		return "", nil, nil // No active scenario
+	}
+
+	state, err := GetUserScenario(chatID, user.ActiveScenarioID)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return user.ActiveScenarioID, state, nil
+}
+
+// SetUserActiveScenario sets user's active scenario
+func SetUserActiveScenario(chatID, scenarioID string) error {
+	users, err := ReadJSONRetry[UserMap]("data/users.json", 3)
+	if err != nil {
+		return fmt.Errorf("failed to read users data: %w", err)
+	}
+
+	user, ok := users[chatID]
+	if !ok {
+		return fmt.Errorf("user not found")
+	}
+
+	user.ActiveScenarioID = scenarioID
+
+	return WriteJSONRetry("data/users.json", users, 3)
+}
+
+// IsScenarioCompleted checks if user has completed a scenario
+func IsScenarioCompleted(chatID, scenarioID string) (bool, error) {
+	state, err := GetUserScenario(chatID, scenarioID)
+	if err != nil {
+		return false, err
+	}
+	return state.Status == StatusCompleted, nil
 }
