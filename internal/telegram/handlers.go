@@ -78,17 +78,20 @@ func (b *Bot) buildStartMessage(chatID string) (tgbotapi.MessageConfig, error) {
 	msg.ParseMode = "HTML"
 	msg.DisableWebPagePreview = true
 
+	// Get button text from messages.json (with fallback to "Принимаю")
+	buttonText, _ := services.GetStartButtonText()
+
 	// Set keyboard based on user's messaging status
 	userData, err := services.GetUser(chatID)
 	if err == nil {
 		if userData.IsMessaging {
-			msg.ReplyMarkup = dataButton("✅ Принято", "decline")
+			msg.ReplyMarkup = dataButton("✅ "+buttonText, "decline")
 		} else {
-			msg.ReplyMarkup = dataButton("🔲 Принимаю", "accept")
+			msg.ReplyMarkup = dataButton("🔲 "+buttonText, "accept")
 		}
 	} else {
 		// Default keyboard for new users
-		msg.ReplyMarkup = dataButton("🔲 Принимаю", "accept")
+		msg.ReplyMarkup = dataButton("🔲 "+buttonText, "accept")
 	}
 
 	return msg, nil
