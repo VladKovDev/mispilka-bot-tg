@@ -187,11 +187,12 @@ func (b *Bot) acceptCallback(callback *tgbotapi.CallbackQuery) {
 		}
 	}
 
-	// Update button to "✅ Принято"
+	// Get button text from messages.json and update button
+	buttonText, _ := services.GetStartButtonText()
 	edit := tgbotapi.NewEditMessageReplyMarkup(
 		callback.From.ID,
 		callback.Message.MessageID,
-		dataButton("✅ Принято", "decline"))
+		dataButton("✅ "+buttonText, "decline"))
 	if _, err := b.bot.Send(edit); err != nil {
 		log.Printf("failed to update button markup for user %s: %v", userID, err)
 	}
