@@ -91,8 +91,8 @@ func TestLoader_Load(t *testing.T) {
 func TestLoader_LoadAndRender(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Setup template file
-	templateContent := "Hello {{name}}, welcome to {{place}}!"
+	// Setup template file with scoped variables
+	templateContent := "Hello {{user.name}}, welcome to {{scenario.place}}!"
 	templatePath := filepath.Join(tmpDir, "welcome.md")
 	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
 		t.Fatalf("setup failed: %v", err)
@@ -107,7 +107,7 @@ func TestLoader_LoadAndRender(t *testing.T) {
 		t.Fatalf("failed to load template: %v", err)
 	}
 
-	vars := map[string]string{"name": "Alice", "place": "Wonderland"}
+	vars := map[string]string{"user.name": "Alice", "scenario.place": "Wonderland"}
 	result, err := r.Render(template, vars)
 	if err != nil {
 		t.Fatalf("failed to render: %v", err)
