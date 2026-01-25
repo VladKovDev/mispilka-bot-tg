@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 	"mispilkabot/config"
+	domainScenario "mispilkabot/internal/domain/scenario"
 	"mispilkabot/internal/services"
 	"mispilkabot/internal/services/scenario"
+	"mispilkabot/internal/services/validation"
 	"mispilkabot/internal/services/wizard"
 	"sort"
 	"strconv"
@@ -149,6 +151,15 @@ func (b *Bot) handleUpdates(ctx context.Context, updates tgbotapi.UpdatesChannel
 				continue
 			}
 
+			// Check if user has an active wizard - handle text input
+			if b.wizardManager != nil && !update.Message.IsCommand() && update.Message.Text != "" {
+				userID := fmt.Sprint(update.Message.From.ID)
+				if _, err := b.wizardManager.Get(userID); err == nil {
+					b.handleWizardMessage(update.Message)
+					continue
+				}
+			}
+
 			if update.Message.IsCommand() {
 				b.handleCommand(update.Message)
 			}
@@ -160,10 +171,16 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery) {
 	switch callback.Data {
 	case "accept":
 		b.acceptCallback(callback)
+	case "wizard_confirm_scenario":
+		b.handleWizardConfirm(callback)
+	case "wizard_cancel":
+		b.handleWizardCancel(callback)
 	default:
 		// Check if it's a pagination callback (format: users_page_1)
 		if strings.HasPrefix(callback.Data, "users_page_") {
 			b.usersPaginationCallback(callback)
+		} else if strings.HasPrefix(callback.Data, "scenario_info_") {
+			b.handleScenarioInfoCallback(callback)
 		} else {
 			callbackResponse := tgbotapi.NewCallback(callback.ID, "")
 			if _, err := b.bot.Send(callbackResponse); err != nil {
@@ -171,6 +188,250 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery) {
 			}
 		}
 	}
+}
+
+// handleWizardMessage handles text messages from users in active wizard sessions
+func (b *Bot) handleWizardMessage(message *tgbotapi.Message) {
+	userID := fmt.Sprint(message.From.ID)
+	text := message.Text
+
+	// Get current wizard state
+	state, err := b.wizardManager.Get(userID)
+	if err != nil {
+		log.Printf("[WIZARD] Failed to get wizard state for user %s: %v", userID, err)
+		return
+	}
+
+	log.Printf("[WIZARD] Processing step %s for user %s with input: %q", state.CurrentStep, userID, text)
+
+	// Validate input based on current step
+	if err := b.validateWizardInput(state.CurrentStep, text); err != nil {
+		b.sendValidationError(message.Chat.ID, err)
+		return
+	}
+
+	// Store the input in wizard data
+	state.Set(string(state.CurrentStep), text)
+
+	// Determine next step based on current step and wizard type
+	var nextStep wizard.WizardStep
+	var nextPrompt string
+
+	switch state.WizardType {
+	case wizard.WizardTypeCreateScenario:
+		nextStep, nextPrompt = b.getNextScenarioStep(state)
+	default:
+		log.Printf("[WIZARD] Unknown wizard type: %s", state.WizardType)
+		b.sendWizardError(message.Chat.ID, "Unknown wizard type")
+		return
+	}
+
+	// Handle confirmation step
+	if isConfirmationStep(nextStep) {
+		if err := b.wizardManager.Advance(userID, nextStep); err != nil {
+			log.Printf("[WIZARD] Failed to advance wizard for user %s: %v", userID, err)
+			b.sendWizardError(message.Chat.ID, "Failed to advance wizard")
+			return
+		}
+		b.sendConfirmationForStep(message.Chat.ID, nextStep, state)
+		return
+	}
+
+	// Check if wizard is complete
+	if nextStep == "" {
+		if err := b.finalizeScenarioWizard(userID, state); err != nil {
+			b.sendWizardError(message.Chat.ID, "Failed to create scenario: "+err.Error())
+		} else {
+			b.sendMessage(message.Chat.ID, "✅ Scenario created successfully!")
+		}
+		_ = b.wizardManager.Cancel(userID)
+		return
+	}
+
+	// Advance to next step
+	if err := b.wizardManager.Advance(userID, nextStep); err != nil {
+		log.Printf("[WIZARD] Failed to advance wizard for user %s: %v", userID, err)
+		b.sendWizardError(message.Chat.ID, "Failed to advance wizard")
+		return
+	}
+
+	// Send next step prompt
+	b.sendMessage(message.Chat.ID, nextPrompt)
+}
+
+// validateWizardInput validates user input for a wizard step
+func (b *Bot) validateWizardInput(step wizard.WizardStep, input string) error {
+	switch step {
+	case wizard.StepScenarioName:
+		return validation.ValidateScenarioName(input)
+	case wizard.StepProductName:
+		return validation.ValidateProductName(input)
+	case wizard.StepProductPrice:
+		return validation.ValidateProductPrice(input)
+	case wizard.StepPaidContent:
+		return validation.ValidatePaidContent(input)
+	case wizard.StepPrivateGroupID:
+		return validation.ValidatePrivateGroupID(input)
+	default:
+		return nil // No validation for other steps
+	}
+}
+
+// sendValidationError sends a validation error message
+func (b *Bot) sendValidationError(chatID int64, err error) {
+	msg := tgbotapi.NewMessage(chatID, "⚠️ "+err.Error()+"\n\nPlease try again:")
+	msg.ParseMode = "HTML"
+	if _, err := b.bot.Send(msg); err != nil {
+		log.Printf("Failed to send validation error: %v", err)
+	}
+}
+
+// isConfirmationStep checks if a step is a confirmation step
+func isConfirmationStep(step wizard.WizardStep) bool {
+	return step == wizard.StepConfirmGeneral ||
+		step == wizard.StepConfirmSummary ||
+		step == wizard.StepConfirmMessage
+}
+
+// sendConfirmationForStep sends the appropriate confirmation message
+func (b *Bot) sendConfirmationForStep(chatID int64, step wizard.WizardStep, state *wizard.WizardState) {
+	switch step {
+	case wizard.StepConfirmGeneral:
+		b.sendScenarioConfirmation(chatID, state)
+	case wizard.StepConfirmSummary:
+		b.sendSummaryConfirmation(chatID, state)
+	case wizard.StepConfirmMessage:
+		b.sendMessageConfirmation(chatID, state)
+	default:
+		b.sendWizardError(chatID, "Unknown confirmation step")
+	}
+}
+
+// getNextScenarioStep determines the next step and prompt for scenario creation wizard
+func (b *Bot) getNextScenarioStep(state *wizard.WizardState) (nextStep wizard.WizardStep, prompt string) {
+	currentStep := state.CurrentStep
+
+	switch currentStep {
+	case wizard.StepScenarioName:
+		return wizard.StepProductName, b.getPromptForStep(wizard.StepProductName)
+	case wizard.StepProductName:
+		return wizard.StepProductPrice, b.getPromptForStep(wizard.StepProductPrice)
+	case wizard.StepProductPrice:
+		return wizard.StepPaidContent, b.getPromptForStep(wizard.StepPaidContent)
+	case wizard.StepPaidContent:
+		return wizard.StepPrivateGroupID, b.getPromptForStep(wizard.StepPrivateGroupID)
+	case wizard.StepPrivateGroupID:
+		return wizard.StepConfirmGeneral, ""
+	default:
+		return "", ""
+	}
+}
+
+// getPromptForStep returns the prompt text for a wizard step
+func (b *Bot) getPromptForStep(step wizard.WizardStep) string {
+	switch step {
+	case wizard.StepScenarioName:
+		return "📝 <b>Create New Scenario</b>\n\n" +
+			"Let's create a new scenario step by step.\n\n" +
+			"First, enter a <b>name</b> for this scenario:"
+	case wizard.StepProductName:
+		return "📦 Enter the <b>product name</b> (what users are paying for):"
+	case wizard.StepProductPrice:
+		return "💰 Enter the <b>product price</b> in rubles (e.g., 500):"
+	case wizard.StepPaidContent:
+		return "📝 Enter a <b>description</b> of the paid content:"
+	case wizard.StepPrivateGroupID:
+		return "👥 Enter the <b>private group ID</b>:\n\n" +
+			"<i>Format: -100XXXXXXXXXX (e.g., -1001234567890)</i>\n" +
+			"<i>You can find this by adding your bot to the group.</i>"
+	default:
+		return fmt.Sprintf("Please send data for step: %s", step)
+	}
+}
+
+// finalizeScenarioWizard creates the scenario from collected wizard data
+func (b *Bot) finalizeScenarioWizard(userID string, state *wizard.WizardState) error {
+	if b.scenarioService == nil {
+		return fmt.Errorf("scenario service not initialized")
+	}
+
+	// Generate scenario ID from name (simple slug)
+	scenarioName := state.GetString(string(wizard.StepScenarioName))
+	scenarioID := strings.ToLower(strings.ReplaceAll(scenarioName, " ", "_"))
+
+	// Create the scenario
+	req := &scenario.CreateScenarioRequest{
+		ID:   scenarioID,
+		Name: scenarioName,
+		Prodamus: domainScenario.ProdamusConfig{
+			ProductName:    state.GetString(string(wizard.StepProductName)),
+			ProductPrice:   state.GetString(string(wizard.StepProductPrice)),
+			PaidContent:    state.GetString(string(wizard.StepPaidContent)),
+			PrivateGroupID: state.GetString(string(wizard.StepPrivateGroupID)),
+		},
+	}
+
+	if _, err := b.scenarioService.CreateScenario(req); err != nil {
+		return fmt.Errorf("failed to create scenario: %w", err)
+	}
+
+	log.Printf("[WIZARD] Scenario %s created successfully by user %s", scenarioID, userID)
+	return nil
+}
+
+// sendWizardError sends an error message to the user
+func (b *Bot) sendWizardError(chatID int64, text string) {
+	msg := tgbotapi.NewMessage(chatID, "❌ "+text)
+	msg.ParseMode = "HTML"
+	if _, err := b.bot.Send(msg); err != nil {
+		log.Printf("Failed to send wizard error: %v", err)
+	}
+}
+
+// sendScenarioConfirmation sends a confirmation message with the collected scenario data
+func (b *Bot) sendScenarioConfirmation(chatID int64, state *wizard.WizardState) {
+	scenarioName := state.GetString(string(wizard.StepScenarioName))
+	productName := state.GetString(string(wizard.StepProductName))
+	productPrice := state.GetString(string(wizard.StepProductPrice))
+	paidContent := state.GetString(string(wizard.StepPaidContent))
+	privateGroupID := state.GetString(string(wizard.StepPrivateGroupID))
+
+	var sb strings.Builder
+	sb.WriteString("✅ <b>Confirm Scenario Creation</b>\n\n")
+	sb.WriteString(fmt.Sprintf("<b>Name:</b> %s\n", scenarioName))
+	sb.WriteString(fmt.Sprintf("<b>Product:</b> %s\n", productName))
+	sb.WriteString(fmt.Sprintf("<b>Price:</b> %s ₽\n", productPrice))
+	sb.WriteString(fmt.Sprintf("<b>Paid Content:</b> %s\n", paidContent))
+	sb.WriteString(fmt.Sprintf("<b>Group ID:</b> <code>%s</code>\n\n", privateGroupID))
+	sb.WriteString("Click <b>Confirm</b> to create this scenario or <b>Cancel</b> to start over.")
+
+	// Create inline keyboard with confirm/cancel buttons
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("✅ Confirm", "wizard_confirm_scenario"),
+			tgbotapi.NewInlineKeyboardButtonData("❌ Cancel", "wizard_cancel"),
+		),
+	)
+
+	msg := tgbotapi.NewMessage(chatID, sb.String())
+	msg.ParseMode = "HTML"
+	msg.ReplyMarkup = &keyboard
+
+	if _, err := b.bot.Send(msg); err != nil {
+		log.Printf("Failed to send confirmation message: %v", err)
+	}
+}
+
+// sendSummaryConfirmation sends summary confirmation message (TODO: implement in Phase 3)
+func (b *Bot) sendSummaryConfirmation(chatID int64, state *wizard.WizardState) {
+	// TODO: Implement in Phase 3
+	_ = b.sendMessage(chatID, "Summary confirmation - to be implemented")
+}
+
+// sendMessageConfirmation sends message confirmation (TODO: implement in Phase 4)
+func (b *Bot) sendMessageConfirmation(chatID int64, state *wizard.WizardState) {
+	// TODO: Implement in Phase 4
+	_ = b.sendMessage(chatID, "Message confirmation - to be implemented")
 }
 
 func (b *Bot) acceptCallback(callback *tgbotapi.CallbackQuery) {
@@ -207,6 +468,94 @@ func (b *Bot) acceptCallback(callback *tgbotapi.CallbackQuery) {
 
 	// Start message scheduling
 	services.SetSchedule(time.Now(), userID, b.sendScheduledMessage)
+}
+
+// handleWizardConfirm handles the wizard confirmation callback
+func (b *Bot) handleWizardConfirm(callback *tgbotapi.CallbackQuery) {
+	userID := fmt.Sprint(callback.From.ID)
+	chatID := callback.From.ID
+
+	// Get wizard state
+	state, err := b.wizardManager.Get(userID)
+	if err != nil {
+		log.Printf("[WIZARD] Failed to get wizard state for confirmation: %v", err)
+		b.answerCallback(callback.ID, "❌ Wizard expired")
+		return
+	}
+
+	// Finalize scenario creation
+	if err := b.finalizeScenarioWizard(userID, state); err != nil {
+		log.Printf("[WIZARD] Failed to finalize scenario: %v", err)
+		b.answerCallback(callback.ID, "❌ Failed to create scenario")
+		return
+	}
+
+	// Cancel the wizard
+	_ = b.wizardManager.Cancel(userID)
+
+	// Edit the message to show success
+	edit := tgbotapi.NewEditMessageText(chatID, callback.Message.MessageID, "✅ Scenario created successfully!")
+	edit.ParseMode = "HTML"
+	if _, err := b.bot.Send(edit); err != nil {
+		log.Printf("Failed to edit confirmation message: %v", err)
+	}
+
+	b.answerCallback(callback.ID, "")
+}
+
+// handleWizardCancel handles the wizard cancel callback
+func (b *Bot) handleWizardCancel(callback *tgbotapi.CallbackQuery) {
+	userID := fmt.Sprint(callback.From.ID)
+	chatID := callback.From.ID
+
+	// Cancel the wizard
+	_ = b.wizardManager.Cancel(userID)
+
+	// Edit the message to show cancellation
+	edit := tgbotapi.NewEditMessageText(chatID, callback.Message.MessageID, "❌ Scenario creation cancelled")
+	edit.ParseMode = "HTML"
+	if _, err := b.bot.Send(edit); err != nil {
+		log.Printf("Failed to edit cancellation message: %v", err)
+	}
+
+	b.answerCallback(callback.ID, "")
+}
+
+// handleScenarioInfoCallback handles the scenario info callback
+func (b *Bot) handleScenarioInfoCallback(callback *tgbotapi.CallbackQuery) {
+	// Extract scenario ID from callback data
+	data := callback.Data
+	if !strings.HasPrefix(data, "scenario_info_") {
+		b.answerCallback(callback.ID, "❌ Invalid callback")
+		return
+	}
+
+	scenarioID := strings.TrimPrefix(data, "scenario_info_")
+
+	// Get scenario details
+	sc, err := b.scenarioService.GetScenario(scenarioID)
+	if err != nil {
+		log.Printf("[ADMIN] Failed to get scenario %s: %v", scenarioID, err)
+		b.answerCallback(callback.ID, "❌ Failed to load scenario")
+		return
+	}
+
+	// Send scenario demo
+	if err := b.sendScenarioDemo(callback.From.ID, sc); err != nil {
+		log.Printf("[ADMIN] Failed to send scenario demo: %v", err)
+		b.answerCallback(callback.ID, "❌ Failed to show scenario")
+		return
+	}
+
+	b.answerCallback(callback.ID, "")
+}
+
+// answerCallback sends a callback answer
+func (b *Bot) answerCallback(callbackID, text string) {
+	callbackResponse := tgbotapi.NewCallback(callbackID, text)
+	if _, err := b.bot.Send(callbackResponse); err != nil {
+		log.Printf("failed to send callback response: %v", err)
+	}
 }
 
 func (b *Bot) sendScheduledMessage(chatID string) {
