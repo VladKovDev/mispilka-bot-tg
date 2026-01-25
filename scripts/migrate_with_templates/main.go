@@ -553,8 +553,8 @@ func createBotGlobals() error {
 
 func createScenarioRegistry(scenarioID string, envVars *EnvVars) error {
 	registry := map[string]interface{}{
-		"scenarios": []map[string]interface{}{
-			{
+		"scenarios": map[string]interface{}{
+			scenarioID: map[string]interface{}{
 				"id":         scenarioID,
 				"name":       "Migrated Scenario",
 				"created_at": time.Now().Format(time.RFC3339),
