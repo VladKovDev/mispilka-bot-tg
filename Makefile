@@ -1,4 +1,4 @@
-.PHONY:
+.PHONY: build run run-dev test test-verbose
 .SILENT:
 
 build:
@@ -9,3 +9,9 @@ run: build
 
 run-dev:
 	go run cmd/app/main.go
+
+test:
+	go test ./...
+
+test-verbose:
+	go test -v ./...
