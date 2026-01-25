@@ -157,7 +157,7 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery) {
 			b.usersPaginationCallback(callback)
 		} else {
 			callbackResponse := tgbotapi.NewCallback(callback.ID, "")
-			if _, err := b.bot.Send(callbackResponse); err != nil {
+			if _, err := b.bot.Request(callbackResponse); err != nil {
 				log.Printf("failed to send callback response: %v", err)
 			}
 		}
@@ -696,7 +696,7 @@ func (b *Bot) usersPaginationCallback(callback *tgbotapi.CallbackQuery) {
 	if err != nil {
 		log.Printf("Failed to get users for pagination: %v", err)
 		resp := tgbotapi.NewCallback(callback.ID, "Ошибка")
-		b.bot.Send(resp)
+		b.bot.Request(resp)
 		return
 	}
 
@@ -706,7 +706,7 @@ func (b *Bot) usersPaginationCallback(callback *tgbotapi.CallbackQuery) {
 	if err != nil {
 		log.Printf("Failed to parse page number from callback: %v", err)
 		resp := tgbotapi.NewCallback(callback.ID, "")
-		b.bot.Send(resp)
+		b.bot.Request(resp)
 		return
 	}
 
@@ -723,11 +723,11 @@ func (b *Bot) usersPaginationCallback(callback *tgbotapi.CallbackQuery) {
 	if err := b.sendUsersPageEdit(callback.Message.MessageID, callback.Message.Chat.ID, sortedUsers, page); err != nil {
 		log.Printf("Failed to send users page: %v", err)
 		resp := tgbotapi.NewCallback(callback.ID, "Ошибка")
-		b.bot.Send(resp)
+		b.bot.Request(resp)
 		return
 	}
 
 	// Answer callback
 	resp := tgbotapi.NewCallback(callback.ID, "")
-	b.bot.Send(resp)
+	b.bot.Request(resp)
 }
