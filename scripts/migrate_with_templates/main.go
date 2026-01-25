@@ -225,8 +225,9 @@ func createDirectories(scenarioID string) error {
 }
 
 func migrateData(sourceDir, scenarioID string, envVars *EnvVars) error {
-	// Migrate messages to scenario
-	if err := migrateMessages(sourceDir, scenarioID); err != nil {
+	// Load messages to memory (will be stored in registry)
+	migratedMessages, err := loadMigratedMessages(sourceDir)
+	if err != nil {
 		return err
 	}
 
@@ -245,11 +246,6 @@ func migrateData(sourceDir, scenarioID string, envVars *EnvVars) error {
 		return err
 	}
 
-	// Create scenario config with .env values
-	if err := createScenarioConfig(scenarioID, envVars); err != nil {
-		return err
-	}
-
 	// Create button registry
 	if err := createButtonRegistry(); err != nil {
 		return err
@@ -260,62 +256,112 @@ func migrateData(sourceDir, scenarioID string, envVars *EnvVars) error {
 		return err
 	}
 
-	// Create scenario registry
-	if err := createScenarioRegistry(scenarioID, envVars); err != nil {
+	// Create scenario registry with all data (config + messages)
+	if err := createScenarioRegistry(sourceDir, scenarioID, envVars, migratedMessages); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func migrateMessages(sourceDir, scenarioID string) error {
+func loadMigratedMessages(sourceDir string) (map[string]interface{}, error) {
 	sourcePath := filepath.Join(sourceDir, "messages.json")
 	data, err := os.ReadFile(sourcePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			fmt.Println("  No messages.json to migrate")
-			return nil
+			return nil, nil
 		}
-		return err
+		return nil, err
 	}
 
-	// The messages.json is already in the correct format for new scenarios
-	// Just copy it over
-	destPath := filepath.Join("data/scenarios", scenarioID, "messages.json")
-	if err := os.WriteFile(destPath, data, 0644); err != nil {
-		return err
+	// Parse as map to handle both legacy and new formats
+	var rawMsgs map[string]interface{}
+	if err := json.Unmarshal(data, &rawMsgs); err != nil {
+		return nil, err
 	}
-	fmt.Printf("  Migrated messages to %s\n", destPath)
 
-	// Copy message templates directory
-	msgsDir := filepath.Join(sourceDir, "messages")
-	destMsgsDir := filepath.Join("data/scenarios", scenarioID, "messages")
-	if info, err := os.Stat(msgsDir); err == nil && info.IsDir() {
-		if err := filepath.Walk(msgsDir, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
+	// Convert legacy message format to new format (kept in memory)
+	return convertLegacyMessagesRaw(rawMsgs), nil
+}
+
+func convertLegacyMessagesRaw(rawMsgs map[string]interface{}) map[string]interface{} {
+	// Extract messages list
+	var messagesList []string
+	if ml, ok := rawMsgs["messages_list"].([]interface{}); ok {
+		for _, item := range ml {
+			if str, ok := item.(string); ok {
+				messagesList = append(messagesList, str)
 			}
-			if info.IsDir() {
-				return nil
-			}
-			if filepath.Ext(path) == ".md" {
-				dest := filepath.Join(destMsgsDir, filepath.Base(path))
-				data, err := os.ReadFile(path)
-				if err != nil {
-					return err
-				}
-				if err := os.WriteFile(dest, data, 0644); err != nil {
-					return err
-				}
-				fmt.Printf("  Copied template: %s\n", filepath.Base(path))
-			}
-			return nil
-		}); err != nil {
-			return err
 		}
 	}
 
-	return nil
+	// Convert messages
+	messagesRaw, ok := rawMsgs["messages"].(map[string]interface{})
+	if !ok {
+		messagesRaw = make(map[string]interface{})
+	}
+
+	newMessages := make(map[string]interface{})
+
+	for key, value := range messagesRaw {
+		msgMap, ok := value.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		newMsg := make(map[string]interface{})
+
+		// Handle timing - could be array [hours, minutes] or object {hours, minutes}
+		if timing, ok := msgMap["timing"].([]interface{}); ok && len(timing) == 2 {
+			// Legacy format: [hours, minutes]
+			hours := int(timing[0].(float64))
+			minutes := int(timing[1].(float64))
+			newMsg["timing"] = map[string]int{
+				"hours":   hours,
+				"minutes": minutes,
+			}
+		} else if timing, ok := msgMap["timing"].(map[string]interface{}); ok {
+			// New format: {hours, minutes}
+			newMsg["timing"] = timing
+		}
+
+		// Handle template_file
+		if templateFile, ok := msgMap["template_file"].(string); ok && templateFile != "" {
+			newMsg["template_file"] = templateFile
+		}
+
+		// Handle url_button conversion to inline_keyboard (legacy format)
+		if urlBtn, ok := msgMap["url_button"].([]interface{}); ok && len(urlBtn) == 2 {
+			url := urlBtn[0].(string)
+			text := urlBtn[1].(string)
+			newMsg["inline_keyboard"] = map[string]interface{}{
+				"rows": []map[string]interface{}{
+					{
+						"buttons": []map[string]interface{}{
+							{
+								"type": "url",
+								"text": text,
+								"url":  url,
+							},
+						},
+					},
+				},
+			}
+		}
+
+		// Copy inline_keyboard if exists (new format)
+		if keyboard, ok := msgMap["inline_keyboard"].(map[string]interface{}); ok {
+			newMsg["inline_keyboard"] = keyboard
+		}
+
+		newMessages[key] = newMsg
+	}
+
+	return map[string]interface{}{
+		"messages_list": messagesList,
+		"messages":      newMessages,
+	}
 }
 
 func migrateUsers(sourceDir, scenarioID string) error {
@@ -471,33 +517,6 @@ func migrateScheduleBackup(sourceDir string) error {
 	return nil
 }
 
-func createScenarioConfig(scenarioID string, envVars *EnvVars) error {
-	config := map[string]interface{}{
-		"id":         scenarioID,
-		"name":       "Migrated Scenario",
-		"created_at": time.Now().Format(time.RFC3339),
-		"prodamus": map[string]string{
-			"product_name":     envVars.ProdamusProductName,
-			"product_price":    envVars.ProdamusProductPrice,
-			"paid_content":     envVars.ProdamusPaidContent,
-			"private_group_id": envVars.PrivateGroupID,
-		},
-	}
-
-	data, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	configPath := filepath.Join("data/scenarios", scenarioID, "config.json")
-	if err := os.WriteFile(configPath, data, 0644); err != nil {
-		return err
-	}
-	fmt.Printf("  Created scenario config: %s\n", configPath)
-
-	return nil
-}
-
 func createButtonRegistry() error {
 	registry := map[string]interface{}{
 		"button_sets": map[string]interface{}{
@@ -551,7 +570,16 @@ func createBotGlobals() error {
 	return nil
 }
 
-func createScenarioRegistry(scenarioID string, envVars *EnvVars) error {
+func createScenarioRegistry(sourceDir, scenarioID string, envVars *EnvVars, messages map[string]interface{}) error {
+	// Prepare messages structure (empty if no messages)
+	messagesData := map[string]interface{}{
+		"messages_list": []string{},
+		"messages":      map[string]interface{}{},
+	}
+	if messages != nil {
+		messagesData = messages
+	}
+
 	registry := map[string]interface{}{
 		"scenarios": map[string]interface{}{
 			scenarioID: map[string]interface{}{
@@ -567,10 +595,7 @@ func createScenarioRegistry(scenarioID string, envVars *EnvVars) error {
 						"private_group_id": envVars.PrivateGroupID,
 					},
 				},
-				"messages": map[string]interface{}{
-					"messages_list": []string{},
-					"messages":      map[string]interface{}{},
-				},
+				"messages": messagesData,
 				"summary": map[string]interface{}{
 					"template_file": "summary.md",
 				},
@@ -589,14 +614,43 @@ func createScenarioRegistry(scenarioID string, envVars *EnvVars) error {
 	}
 	fmt.Println("  Created scenario registry")
 
+	// Copy message templates directory if exists
+	msgsDir := filepath.Join(sourceDir, "messages")
+	destMsgsDir := filepath.Join("data/scenarios", scenarioID, "messages")
+	if info, err := os.Stat(msgsDir); err == nil && info.IsDir() {
+		if err := os.MkdirAll(destMsgsDir, 0755); err != nil {
+			return err
+		}
+		if err := filepath.Walk(msgsDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+			if filepath.Ext(path) == ".md" {
+				dest := filepath.Join(destMsgsDir, filepath.Base(path))
+				data, err := os.ReadFile(path)
+				if err != nil {
+					return err
+				}
+				if err := os.WriteFile(dest, data, 0644); err != nil {
+					return err
+				}
+				fmt.Printf("  Copied template: %s\n", filepath.Base(path))
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
 func verifyMigration(scenarioID string) error {
 	requiredFiles := []string{
 		"data/scenarios/registry.json",
-		filepath.Join("data/scenarios", scenarioID, "config.json"),
-		filepath.Join("data/scenarios", scenarioID, "messages.json"),
 		"data/buttons/registry.json",
 		"data/templates/bot_globals.json",
 		"data/users.json",
@@ -608,6 +662,25 @@ func verifyMigration(scenarioID string) error {
 		}
 		fmt.Printf("  ✓ %s exists\n", file)
 	}
+
+	// Verify scenario has messages loaded
+	data, err := os.ReadFile("data/scenarios/registry.json")
+	if err != nil {
+		return err
+	}
+	var registry map[string]interface{}
+	if err := json.Unmarshal(data, &registry); err != nil {
+		return err
+	}
+	scenarios, ok := registry["scenarios"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid registry format: scenarios not found")
+	}
+	_, ok = scenarios[scenarioID].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("scenario %s not found in registry", scenarioID)
+	}
+	fmt.Printf("  ✓ Scenario '%s' loaded in registry\n", scenarioID)
 
 	return nil
 }

@@ -3,6 +3,7 @@ package scenario
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -153,17 +154,21 @@ func (s *Service) CreateScenario(req *CreateScenarioRequest) (*domainScenario.Sc
 
 // GetScenario retrieves a scenario by ID
 func (s *Service) GetScenario(scenarioID string) (*domainScenario.Scenario, error) {
+	// Load registry for metadata
 	if err := s.registry.Load(); err != nil {
 		return nil, fmt.Errorf("failed to load registry: %w", err)
 	}
 
-	if _, ok := s.registry.Scenarios[scenarioID]; !ok {
-		return nil, domainScenario.ErrScenarioNotFound
+	// Check if scenario exists in registry or filesystem
+	_, inRegistry := s.registry.Scenarios[scenarioID]
+	scenarioDir := filepath.Join(s.scenariosDir, scenarioID)
+	if _, err := os.Stat(scenarioDir); os.IsNotExist(err) {
+		if !inRegistry {
+			return nil, domainScenario.ErrScenarioNotFound
+		}
 	}
 
-	// Load full scenario data
-	scenarioDir := filepath.Join(s.scenariosDir, scenarioID)
-
+	// Load full scenario data from filesystem
 	// Load config
 	configPath := filepath.Join(scenarioDir, "config.json")
 	config := NewConfig(configPath)
@@ -187,15 +192,40 @@ func (s *Service) GetScenario(scenarioID string) (*domainScenario.Scenario, erro
 
 // ListScenarios returns all scenarios
 func (s *Service) ListScenarios() ([]*domainScenario.Scenario, error) {
+	// Load registry for metadata
 	if err := s.registry.Load(); err != nil {
 		return nil, fmt.Errorf("failed to load registry: %w", err)
 	}
 
-	scenarios := make([]*domainScenario.Scenario, 0, len(s.registry.Scenarios))
-	for scenarioID := range s.registry.Scenarios {
+	// Scan scenarios directory for all scenario directories
+	entries, err := os.ReadDir(s.scenariosDir)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("failed to read scenarios directory: %w", err)
+	}
+
+	scenarios := make([]*domainScenario.Scenario, 0)
+
+	// Collect scenario IDs from both registry and filesystem
+	scenarioIDs := make(map[string]bool)
+
+	// Add IDs from registry
+	for id := range s.registry.Scenarios {
+		scenarioIDs[id] = true
+	}
+
+	// Add IDs from filesystem
+	for _, entry := range entries {
+		if entry.IsDir() {
+			scenarioIDs[entry.Name()] = true
+		}
+	}
+
+	// Load each scenario
+	for scenarioID := range scenarioIDs {
 		scenario, err := s.GetScenario(scenarioID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load scenario %s: %w", scenarioID, err)
+			log.Printf("[SCENARIO] Warning: failed to load scenario %s: %v", scenarioID, err)
+			continue
 		}
 		scenarios = append(scenarios, scenario)
 	}
@@ -296,7 +326,9 @@ func (s *Service) SetDefaultScenario(scenarioID string) error {
 		return fmt.Errorf("failed to load registry: %w", err)
 	}
 
-	if _, exists := s.registry.Scenarios[scenarioID]; !exists {
+	// Check if scenario exists by checking if its directory exists
+	scenarioDir := filepath.Join(s.scenariosDir, scenarioID)
+	if _, err := os.Stat(scenarioDir); os.IsNotExist(err) {
 		return domainScenario.ErrScenarioNotFound
 	}
 
@@ -306,6 +338,7 @@ func (s *Service) SetDefaultScenario(scenarioID string) error {
 		return fmt.Errorf("failed to save registry: %w", err)
 	}
 
+	log.Printf("[SCENARIO] Set default scenario to: %s", scenarioID)
 	return nil
 }
 

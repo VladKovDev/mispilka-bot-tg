@@ -65,7 +65,20 @@ func (b *Bot) startCommand(message *tgbotapi.Message) error {
 		// Use default scenario
 		defaultID, err := b.scenarioService.GetDefaultScenario()
 		if err != nil {
-			return fmt.Errorf("failed to get default scenario: %w", err)
+			// No default scenario set - check if any scenarios exist
+			scenarios, listErr := b.scenarioService.ListScenarios()
+			if listErr != nil || len(scenarios) == 0 {
+				// No scenarios configured
+				if b.isAdmin(message.From.ID) {
+					return b.sendMessage(message.Chat.ID, "⚠️ No scenarios configured.\n\nUse /create_scenario to create one.")
+				}
+				return b.sendMessage(message.Chat.ID, "⚠️ Bot is not configured yet. Please contact the administrator.")
+			}
+			// Scenarios exist but no default is set
+			if b.isAdmin(message.From.ID) {
+				return b.sendMessage(message.Chat.ID, "⚠️ No default scenario set.\n\nUse /set_default_scenario {id} to set one.")
+			}
+			return b.sendMessage(message.Chat.ID, "⚠️ Bot is not configured yet. Please contact the administrator.")
 		}
 		scenarioID = defaultID
 	}

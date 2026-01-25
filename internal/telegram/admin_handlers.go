@@ -39,11 +39,6 @@ func (b *Bot) registerAdminCommands() {
 			Role:        command.RoleAdmin,
 		},
 		{
-			Name:        "demo_scenario",
-			Description: "Demonstrate a scenario",
-			Role:        command.RoleAdmin,
-		},
-		{
 			Name:        "create_broadcast",
 			Description: "Create a broadcast",
 			Role:        command.RoleAdmin,
@@ -87,10 +82,6 @@ func (b *Bot) handleAdminCommand(message *tgbotapi.Message) {
 	case "delete_scenario":
 		if err := b.deleteScenarioCommand(message, args); err != nil {
 			log.Printf("[ADMIN] Failed to handle /delete_scenario command: %v", err)
-		}
-	case "demo_scenario":
-		if err := b.demoScenarioCommand(message, args); err != nil {
-			log.Printf("[ADMIN] Failed to handle /demo_scenario command: %v", err)
 		}
 	case "create_broadcast":
 		if err := b.createBroadcastCommand(message); err != nil {
@@ -191,25 +182,6 @@ func (b *Bot) deleteScenarioCommand(message *tgbotapi.Message, payload string) e
 	return b.sendMessage(message.Chat.ID, fmt.Sprintf("🗑️ Scenario '%s' deleted", payload))
 }
 
-// demoScenarioCommand demonstrates a scenario with template highlighting
-func (b *Bot) demoScenarioCommand(message *tgbotapi.Message, payload string) error {
-	if payload == "" {
-		return b.sendMessage(message.Chat.ID, "Usage: /demo_scenario {scenario_id}")
-	}
-
-	if b.scenarioService == nil {
-		return b.sendMessage(message.Chat.ID, "Scenario service not initialized")
-	}
-
-	sc, err := b.scenarioService.GetScenario(payload)
-	if err != nil {
-		return b.sendMessage(message.Chat.ID, "Failed: "+err.Error())
-	}
-
-	// Build demo message with scenario details
-	return b.sendScenarioDemo(message.Chat.ID, sc)
-}
-
 // createBroadcastCommand starts broadcast creation wizard
 func (b *Bot) createBroadcastCommand(message *tgbotapi.Message) error {
 	// TODO: Implement broadcast wizard
@@ -223,18 +195,6 @@ func (b *Bot) sendBroadcastCommand(message *tgbotapi.Message) error {
 }
 
 // Helper methods
-
-// isDefaultScenario checks if the given scenario ID is the default one
-func (b *Bot) isDefaultScenario(scenarioID string) bool {
-	if b.scenarioService == nil {
-		return false
-	}
-	defaultID, err := b.scenarioService.GetDefaultScenario()
-	if err != nil {
-		return false
-	}
-	return defaultID == scenarioID
-}
 
 // buildScenarioKeyboard builds an inline keyboard for scenario actions
 func (b *Bot) buildScenarioKeyboard(scenarios []*domainScenario.Scenario) tgbotapi.InlineKeyboardMarkup {
@@ -251,11 +211,19 @@ func (b *Bot) buildScenarioKeyboard(scenarios []*domainScenario.Scenario) tgbota
 
 // sendWizardMessage sends a message for the current wizard step
 func (b *Bot) sendWizardMessage(chatID int64, state *wizard.WizardState) error {
-	// TODO: Implement proper wizard message generation based on step
-	// For now, just show the current step
-	msgText := fmt.Sprintf("Wizard started. Current step: %s\n\nPlease send the required data.", state.CurrentStep)
+	// Generate appropriate prompt based on wizard type and current step
+	var prompt string
 
-	msg := tgbotapi.NewMessage(chatID, msgText)
+	switch state.WizardType {
+	case wizard.WizardTypeCreateScenario:
+		prompt = b.getScenarioStepPrompt(state.CurrentStep)
+	case wizard.WizardTypeCreateBroadcast:
+		prompt = "Broadcast wizard coming soon!"
+	default:
+		prompt = fmt.Sprintf("Unknown wizard type: %s", state.WizardType)
+	}
+
+	msg := tgbotapi.NewMessage(chatID, prompt)
 	msg.ParseMode = "HTML"
 
 	if _, err := b.bot.Send(msg); err != nil {
@@ -265,38 +233,63 @@ func (b *Bot) sendWizardMessage(chatID int64, state *wizard.WizardState) error {
 	return nil
 }
 
-// sendScenarioDemo sends a demonstration of a scenario
-func (b *Bot) sendScenarioDemo(chatID int64, sc *domainScenario.Scenario) error {
-	var sb strings.Builder
-
-	sb.WriteString(fmt.Sprintf("<b>Scenario:</b> %s\n", sc.Name))
-	sb.WriteString(fmt.Sprintf("<b>ID:</b> <code>%s</code>\n", sc.ID))
-	sb.WriteString(fmt.Sprintf("<b>Status:</b> %s\n", map[bool]string{true: "Active", false: "Inactive"}[sc.IsActive]))
-	sb.WriteString(fmt.Sprintf("<b>Created:</b> %s\n\n", sc.CreatedAt.Format("02.01.2006 15:04")))
-
-	sb.WriteString("<b>Prodamus Config:</b>\n")
-	sb.WriteString(fmt.Sprintf("  Product: %s\n", sc.Config.Prodamus.ProductName))
-	sb.WriteString(fmt.Sprintf("  Price: %s ₽\n", sc.Config.Prodamus.ProductPrice))
-	sb.WriteString(fmt.Sprintf("  Content: %s\n", sc.Config.Prodamus.PaidContent))
-	sb.WriteString(fmt.Sprintf("  Group ID: <code>%s</code>\n\n", sc.Config.Prodamus.PrivateGroupID))
-
-	sb.WriteString(fmt.Sprintf("<b>Messages:</b> %d\n", len(sc.Messages.MessagesList)))
-	for i, msgID := range sc.Messages.MessagesList {
-		if msgData, ok := sc.Messages.Messages[msgID]; ok {
-			sb.WriteString(fmt.Sprintf("  %d. %s (after %dh %dm)\n",
-				i+1, msgID, msgData.Timing.Hours, msgData.Timing.Minutes))
-		}
+// getScenarioStepPrompt returns the prompt text for a scenario creation step
+func (b *Bot) getScenarioStepPrompt(step wizard.WizardStep) string {
+	switch step {
+	case wizard.StepScenarioName:
+		return "📝 <b>Create New Scenario</b>\n\n" +
+			"Let's create a new scenario step by step.\n\n" +
+			"First, enter a <b>name</b> for this scenario:"
+	case wizard.StepProductName:
+		return "📦 Enter the <b>product name</b> (what users are paying for):"
+	case wizard.StepProductPrice:
+		return "💰 Enter the <b>product price</b> in rubles (e.g., 500):"
+	case wizard.StepPaidContent:
+		return "📝 Enter a <b>description</b> of the paid content:"
+	case wizard.StepPrivateGroupID:
+		return "👥 Enter the <b>private group ID</b>:\n\n" +
+			"<i>You can find this by adding your bot to the group and using /users command to see the group ID format.</i>"
+	case wizard.StepSummaryMessage:
+		return "📬 <b>Summary Message</b>\n\n" +
+			"Enter the message text that users will see immediately after payment:\n\n" +
+			"<i>This is the first message users receive. You can use placeholders like {{payment_link}} and {{invite_link}}</i>"
+	case wizard.StepSummaryPhotos:
+		return "🖼️ <b>Summary Photos</b>\n\n" +
+			"Send photos to include with the summary message.\n\n" +
+			"<i>Send multiple photos and click 'Done' when finished, or just click 'Done' to skip photos.</i>"
+	case wizard.StepSummaryButtons:
+		return "🔘 <b>Summary Buttons</b>\n\n" +
+			"Add buttons to the summary message.\n\n" +
+			"<b>Format (one per line):</b>\n" +
+			"Button Text|url|https://example.com\n" +
+			"Button Text|callback|action_name\n\n" +
+			"<i>Or send 'skip' to continue without buttons.</i>"
+	case wizard.StepMessageText:
+		return "📝 <b>Message Text</b>\n\n" +
+			"Enter the message text:\n\n" +
+			"<i>Use HTML formatting: <b>, <code>, <i>, etc.</i>"
+	case wizard.StepMessagePhotos:
+		return "🖼️ <b>Message Photos</b>\n\n" +
+			"Send photos to include with this message.\n\n" +
+			"<i>Send multiple photos and click 'Done' when finished, or just click 'Done' to skip photos.</i>"
+	case wizard.StepMessageTiming:
+		return "⏰ <b>Message Timing</b>\n\n" +
+			"Enter when this message should be sent after the previous message:\n\n" +
+			"<b>Formats:</b>\n" +
+			"• <code>1h 30m</code> - 1 hour 30 minutes\n" +
+			"• <code>90m</code> - 90 minutes\n" +
+			"• <code>2h</code> - 2 hours\n\n" +
+			"<i>Minimum: 1 minute, Maximum: 1 year</i>"
+	case wizard.StepMessageButtons:
+		return "🔘 <b>Message Buttons</b>\n\n" +
+			"Add buttons to this message.\n\n" +
+			"<b>Format (one per line):</b>\n" +
+			"Button Text|url|https://example.com\n" +
+			"Button Text|callback|action_name\n\n" +
+			"<i>Or send 'skip' to continue without buttons.</i>"
+	default:
+		return fmt.Sprintf("Please send data for step: %s", step)
 	}
-
-	msg := tgbotapi.NewMessage(chatID, sb.String())
-	msg.ParseMode = "HTML"
-	msg.DisableWebPagePreview = true
-
-	if _, err := b.bot.Send(msg); err != nil {
-		return fmt.Errorf("failed to send scenario demo: %w", err)
-	}
-
-	return nil
 }
 
 // sendMessageWithKeyboard sends a message with an inline keyboard

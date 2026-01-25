@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"mispilkabot/internal/domain/scenario"
 )
@@ -85,10 +86,19 @@ func (c *Config) Save() error {
 
 // ToScenario converts config to domain Scenario (without messages/summary)
 func (c *Config) ToScenario() *scenario.Scenario {
+	var createdAt time.Time
+	if c.CreatedAt != "" {
+		parsed, err := time.Parse(time.RFC3339, c.CreatedAt)
+		if err == nil {
+			createdAt = parsed
+		}
+	}
+
 	return &scenario.Scenario{
-		ID:       c.ID,
-		Name:     c.Name,
-		IsActive: true,
+		ID:        c.ID,
+		Name:      c.Name,
+		CreatedAt: createdAt,
+		IsActive:  true,
 		Config: scenario.ScenarioConfig{
 			Prodamus: scenario.ProdamusConfig{
 				ProductName:    c.Prodamus.ProductName,

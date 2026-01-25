@@ -219,3 +219,62 @@ func (w *WizardState) GetScenarioID() string {
 func (w *WizardState) SetScenarioID(id string) {
 	w.Set("scenario_id", id)
 }
+
+// PendingMessage represents a message created in wizard that needs to be saved
+type PendingMessage struct {
+	MessageID     string                 `json:"message_id"`
+	TimingHours   int                    `json:"timing_hours"`
+	TimingMinutes int                    `json:"timing_minutes"`
+	Photos        []string               `json:"photos"`
+	Buttons       string                 `json:"buttons"`
+}
+
+// AddPendingMessage adds a pending message to be saved when scenario is finalized
+func (w *WizardState) AddPendingMessage(msg PendingMessage) {
+	messages := w.GetPendingMessages()
+	messages = append(messages, msg)
+	w.Set("pending_messages", messages)
+}
+
+// GetPendingMessages returns all pending messages
+func (w *WizardState) GetPendingMessages() []PendingMessage {
+	val, ok := w.Get("pending_messages")
+	if !ok {
+		return nil
+	}
+	// Handle JSON unmarshaling from interface{}
+	if msgs, ok := val.([]PendingMessage); ok {
+		return msgs
+	}
+	// Try to handle as interface slice
+	if ifaceSlice, ok := val.([]interface{}); ok {
+		messages := make([]PendingMessage, 0, len(ifaceSlice))
+		for _, item := range ifaceSlice {
+			if msgMap, ok := item.(map[string]interface{}); ok {
+				msg := PendingMessage{}
+				if id, ok := msgMap["message_id"].(string); ok {
+					msg.MessageID = id
+				}
+				if h, ok := msgMap["timing_hours"].(float64); ok {
+					msg.TimingHours = int(h)
+				}
+				if m, ok := msgMap["timing_minutes"].(float64); ok {
+					msg.TimingMinutes = int(m)
+				}
+				if photos, ok := msgMap["photos"].([]interface{}); ok {
+					for _, p := range photos {
+						if ps, ok := p.(string); ok {
+							msg.Photos = append(msg.Photos, ps)
+						}
+					}
+				}
+				if btns, ok := msgMap["buttons"].(string); ok {
+					msg.Buttons = btns
+				}
+				messages = append(messages, msg)
+			}
+		}
+		return messages
+	}
+	return nil
+}

@@ -15,6 +15,4 @@ data/*
 
 # Git worktrees for isolated development
 .worktrees/
-
-# Compiled binaries in root directory
-migrate_to_scenarios
+.backup

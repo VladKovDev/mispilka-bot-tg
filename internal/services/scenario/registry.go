@@ -3,11 +3,12 @@ package scenario
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 
 	"mispilkabot/internal/domain/scenario"
+	"mispilkabot/internal/services"
 )
 
 var (
@@ -15,7 +16,7 @@ var (
 	ErrRegistrySaveFailed = errors.New("failed to save registry")
 )
 
-// Registry manages scenario persistence
+// Registry manages scenario persistence with file-level locking
 type Registry struct {
 	filePath string
 	mu       sync.RWMutex
@@ -53,23 +54,32 @@ func (r *Registry) Load() error {
 	return nil
 }
 
-// Save saves the registry to disk
+// Save saves the registry to disk with file locking and atomic writes
 func (r *Registry) Save() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(r.filePath), 0755); err != nil {
-		return ErrRegistrySaveFailed
-	}
-
+	// 1. Marshal data (in RAM, safe if crash happens here)
 	data, err := json.MarshalIndent(r, "", "  ")
 	if err != nil {
 		return ErrRegistrySaveFailed
 	}
 
-	if err := os.WriteFile(r.filePath, data, 0644); err != nil {
-		return ErrRegistrySaveFailed
+	// 2. Get file lock (blocks until acquired)
+	lock, err := services.NewFileLock(r.filePath)
+	if err != nil {
+		return fmt.Errorf("%w: failed to create file lock: %v", ErrRegistrySaveFailed, err)
+	}
+	defer lock.Close()
+
+	if err := lock.Lock(); err != nil {
+		return fmt.Errorf("%w: failed to lock file: %v", ErrRegistrySaveFailed, err)
+	}
+	defer lock.Unlock()
+
+	// 3. Atomic write to disk (safe even if crash happens during write)
+	if err := services.AtomicWriteFile(r.filePath, data); err != nil {
+		return fmt.Errorf("%w: %v", ErrRegistrySaveFailed, err)
 	}
 
 	return nil
