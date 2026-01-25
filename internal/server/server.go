@@ -20,7 +20,7 @@ func New(cfg *config.Config) *Server {
 
 	handler := prodamus.NewHandler()
 	handler.SetSecretKey(cfg.ProdamusSecret)
-	handler.SetPrivateGroupID(cfg.PrivateGroupID)
+	handler.SetPrivateResourceID(cfg.PrivateResourceID)
 	mux.Handle(cfg.WebhookPath, handler)
 
 	addr := fmt.Sprintf("%s:%s", cfg.WebhookHost, cfg.WebhookPort)

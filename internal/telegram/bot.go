@@ -107,20 +107,21 @@ func (b *Bot) handleUpdates(ctx context.Context, updates tgbotapi.UpdatesChannel
 				return
 			}
 
-			// Handle chat_member updates (group join tracking)
-			if update.ChatMember != nil {
+			// Handle chat_member updates (group join tracking) - group mode only
+			if update.ChatMember != nil && b.IsGroupMode() {
 				b.handleChatMember(update.ChatMember, privateChatID)
 				continue
 			}
 
-			// Handle my_chat_member updates (bot's own member status changes)
+			// Handle my_chat_member updates (bot's own member status changes) - both modes
 			if update.MyChatMember != nil {
 				b.handleMyChatMember(update.MyChatMember, privateChatID)
 				continue
 			}
 
 			chatID := update.FromChat().ID
-			if chatID == privateChatID && update.Message != nil {
+			// Handle new_chat_members and left_chat_member messages - group mode only
+			if chatID == privateChatID && update.Message != nil && b.IsGroupMode() {
 				// Handle new chat members (users joining the group)
 				if len(update.Message.NewChatMembers) > 0 {
 					for _, newMember := range update.Message.NewChatMembers {

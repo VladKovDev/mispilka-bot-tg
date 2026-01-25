@@ -20,7 +20,7 @@ import (
 // Handler handles Prodamus webhook requests
 type Handler struct {
 	secretKey            string
-	privateGroupID       string
+	privateResourceID    string
 	generateInviteLinkFn func(userID, groupID string) (string, error)
 	sendInviteMessage    func(userID, inviteLink string)
 	mu                   sync.Mutex     // Protect user mutations during payment processing
@@ -37,9 +37,10 @@ func (h *Handler) SetSecretKey(secretKey string) {
 	h.secretKey = secretKey
 }
 
-// SetPrivateGroupID sets the private group ID for invite link generation
-func (h *Handler) SetPrivateGroupID(groupID string) {
-	h.privateGroupID = groupID
+// SetPrivateResourceID sets the private resource ID for invite link generation
+// Accepts either a group ID or channel ID
+func (h *Handler) SetPrivateResourceID(resourceID string) {
+	h.privateResourceID = resourceID
 }
 
 // SetGenerateInviteLinkCallback sets the callback for generating invite links
@@ -277,14 +278,14 @@ func (h *Handler) handleInviteLinkGeneration(userID string, userData *services.U
 
 // generateInviteLink creates an invite link for the user
 func (h *Handler) generateInviteLink(userID string) (string, error) {
-	if h.privateGroupID == "" {
-		return "", fmt.Errorf("PRIVATE_GROUP_ID not set")
+	if h.privateResourceID == "" {
+		return "", fmt.Errorf("PRIVATE_RESOURCE_ID not set")
 	}
 	if h.generateInviteLinkFn == nil {
 		return "", fmt.Errorf("generateInviteLink callback not set")
 	}
 
-	inviteLink, err := h.generateInviteLinkFn(userID, h.privateGroupID)
+	inviteLink, err := h.generateInviteLinkFn(userID, h.privateResourceID)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate invite link: %w", err)
 	}
