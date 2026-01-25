@@ -6,6 +6,7 @@ import (
 	"mispilkabot/internal/services"
 	"sort"
 	"strings"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -43,31 +44,194 @@ func (b *Bot) handleCommand(message *tgbotapi.Message) {
 func (b *Bot) startCommand(message *tgbotapi.Message) error {
 	chatID := fmt.Sprint(message.Chat.ID)
 
-	// Add user if new
+	// Extract scenario ID from command payload (e.g., /start scenario_id)
+	payload := message.CommandArguments()
+
+	// Get or create user
 	isNew, err := services.IsNewUser(chatID)
 	if err != nil {
 		return fmt.Errorf("failed to check if user is new: %w", err)
 	}
+
 	if isNew {
 		if err := services.AddUser(message); err != nil {
 			return fmt.Errorf("failed to add new user: %w", err)
 		}
 	}
 
-	// Build and send start message
-	msg, err := b.buildStartMessage(chatID)
+	// Determine which scenario to use
+	scenarioID := payload
+	if scenarioID == "" {
+		// Use default scenario
+		defaultID, err := b.scenarioService.GetDefaultScenario()
+		if err != nil {
+			return fmt.Errorf("failed to get default scenario: %w", err)
+		}
+		scenarioID = defaultID
+	}
+
+	// Handle scenario logic
+	return b.handleScenarioStart(chatID, scenarioID, isNew)
+}
+
+// handleScenarioStart handles the scenario start logic for a user
+func (b *Bot) handleScenarioStart(chatID, scenarioID string, isNew bool) error {
+	// Verify scenario exists
+	if _, err := b.scenarioService.GetScenario(scenarioID); err != nil {
+		return fmt.Errorf("failed to get scenario %s: %w", scenarioID, err)
+	}
+
+	// Check user's current state with this scenario
+	userScenario, err := services.GetUserScenario(chatID, scenarioID)
 	if err != nil {
-		return fmt.Errorf("failed to build start message: %w", err)
+		return fmt.Errorf("failed to get user scenario state: %w", err)
 	}
 
-	if _, err := b.bot.Send(msg); err != nil {
-		return fmt.Errorf("failed to send start message: %w", err)
+	// Handle based on user's scenario status
+	switch userScenario.Status {
+	case services.StatusNotStarted:
+		// Start the scenario
+		if err := b.startScenarioForUser(chatID, scenarioID); err != nil {
+			return fmt.Errorf("failed to start scenario: %w", err)
+		}
+		// Send welcome message
+		return b.sendScenarioWelcome(chatID, scenarioID)
+
+	case services.StatusActive:
+		// User already has this scenario active - send welcome message
+		return b.sendScenarioWelcome(chatID, scenarioID)
+
+	case services.StatusCompleted:
+		// User completed this scenario - send summary
+		return b.sendSummary(chatID, scenarioID)
+
+	case services.StatusStopped:
+		// User stopped this scenario - restart it
+		if err := b.restartScenarioForUser(chatID, scenarioID); err != nil {
+			return fmt.Errorf("failed to restart scenario: %w", err)
+		}
+		return b.sendScenarioWelcome(chatID, scenarioID)
 	}
 
+	log.Printf("Unknown scenario status for user %s in scenario %s: %s", chatID, scenarioID, userScenario.Status)
+	return fmt.Errorf("unknown scenario status: %s", userScenario.Status)
+}
+
+// startScenarioForUser initializes and starts a scenario for a user
+func (b *Bot) startScenarioForUser(chatID, scenarioID string) error {
+	// Create initial scenario state
+	now := time.Now()
+	state := &services.UserScenarioState{
+		Status:              services.StatusActive,
+		CurrentMessageIndex: 0,
+		LastSentAt:          &now,
+	}
+
+	// Set as active scenario
+	if err := services.SetUserActiveScenario(chatID, scenarioID); err != nil {
+		return fmt.Errorf("failed to set active scenario: %w", err)
+	}
+
+	// Save scenario state
+	if err := services.SetUserScenario(chatID, scenarioID, state); err != nil {
+		return fmt.Errorf("failed to set user scenario: %w", err)
+	}
+
+	log.Printf("Started scenario %s for user %s", scenarioID, chatID)
 	return nil
 }
 
-// buildStartMessage creates the start command message with appropriate keyboard
+// restartScenarioForUser restarts a stopped scenario for a user
+func (b *Bot) restartScenarioForUser(chatID, scenarioID string) error {
+	now := time.Now()
+	state := &services.UserScenarioState{
+		Status:              services.StatusActive,
+		CurrentMessageIndex: 0,
+		LastSentAt:          &now,
+	}
+
+	if err := services.SetUserActiveScenario(chatID, scenarioID); err != nil {
+		return err
+	}
+
+	if err := services.SetUserScenario(chatID, scenarioID, state); err != nil {
+		return err
+	}
+
+	log.Printf("Restarted scenario %s for user %s", scenarioID, chatID)
+	return nil
+}
+
+// sendScenarioWelcome sends a welcome message for a scenario
+// TODO: Implement template rendering with scenario-specific variables
+func (b *Bot) sendScenarioWelcome(chatID, scenarioID string) error {
+	// For now, send a simple welcome message
+	// TODO: Load template from scenario's welcome_template file and render with variables
+	scenario, err := b.scenarioService.GetScenario(scenarioID)
+	if err != nil {
+		return fmt.Errorf("failed to get scenario: %w", err)
+	}
+
+	parsedID, err := parseID(chatID)
+	if err != nil {
+		return fmt.Errorf("failed to parse chatID: %w", err)
+	}
+
+	// Build welcome message
+	text := fmt.Sprintf("Добро пожаловать в сценарий <b>%s</b>!\n\n", scenario.Name)
+	text += "Нажмите кнопку ниже, чтобы начать."
+
+	msg := tgbotapi.NewMessage(parsedID, text)
+	msg.ParseMode = "HTML"
+	msg.DisableWebPagePreview = true
+	msg.ReplyMarkup = dataButton("🔲 Принимаю", "accept")
+
+	if _, err := b.bot.Send(msg); err != nil {
+		return fmt.Errorf("failed to send welcome message: %w", err)
+	}
+
+	log.Printf("Sent welcome message for scenario %s to user %s", scenarioID, chatID)
+	return nil
+}
+
+// sendSummary sends a summary message for a completed scenario
+// TODO: Implement template rendering with scenario-specific summary
+func (b *Bot) sendSummary(chatID string, scenarioID string) error {
+	// Get scenario details
+	scenario, err := b.scenarioService.GetScenario(scenarioID)
+	if err != nil {
+		return fmt.Errorf("failed to get scenario: %w", err)
+	}
+
+	parsedID, err := parseID(chatID)
+	if err != nil {
+		return fmt.Errorf("failed to parse chatID: %w", err)
+	}
+
+	// TODO: Load and render summary template from scenario
+	text := fmt.Sprintf("Вы завершили сценарий <b>%s</b>.", scenario.Name)
+
+	msg := tgbotapi.NewMessage(parsedID, text)
+	msg.ParseMode = "HTML"
+	msg.DisableWebPagePreview = true
+
+	if _, err := b.bot.Send(msg); err != nil {
+		return fmt.Errorf("failed to send summary message: %w", err)
+	}
+
+	log.Printf("Sent summary message for scenario %s to user %s", scenario.ID, chatID)
+	return nil
+}
+
+// loadTemplate loads a template file and renders it with provided variables
+// TODO: Implement full template loading and rendering
+func (b *Bot) loadTemplate(templateFile string, variables map[string]string) (string, error) {
+	// TODO: Load template from file and replace placeholders
+	// For now, return empty string
+	return "", fmt.Errorf("template loading not yet implemented")
+}
+
+
 func (b *Bot) buildStartMessage(chatID string) (tgbotapi.MessageConfig, error) {
 	text, err := services.GetMessageText(commandStart)
 	if err != nil {
