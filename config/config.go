@@ -9,9 +9,17 @@ import (
 	"github.com/joho/godotenv"
 )
 
+type ResourceType string
+
+const (
+	ResourceTypeGroup   ResourceType = "group"
+	ResourceTypeChannel ResourceType = "channel"
+)
+
 type Config struct {
 	BotToken                   string
-	PrivateGroupID             string
+	PrivateResourceID          string // renamed from PrivateGroupID
+	PrivateResourceType        ResourceType
 	AdminIDs                   []int64
 	WebhookHost                string
 	WebhookPort                string
@@ -26,12 +34,14 @@ type Config struct {
 func Load() *Config {
 	if err := godotenv.Load(); err != nil {
 		fmt.Printf("Error loading .env file: %v\n", err)
-		panic(err)
 	}
+
+	resourceType := ResourceType(getEnv("PRIVATE_RESOURCE_TYPE", string(ResourceTypeGroup)))
 
 	return &Config{
 		BotToken:                   getEnv("BOT_TOKEN", ""),
-		PrivateGroupID:             getEnv("PRIVATE_GROUP_ID", ""),
+		PrivateResourceID:          getEnv("PRIVATE_RESOURCE_ID", ""),
+		PrivateResourceType:        resourceType,
 		AdminIDs:                   parseAdminIDs(getEnv("ADMIN_IDS", "")),
 		WebhookHost:                getEnv("WEBHOOK_HOST", "0.0.0.0"),
 		WebhookPort:                getEnv("WEBHOOK_PORT", "8080"),
@@ -61,6 +71,12 @@ func Validate(cfg *Config) error {
 	}
 	if cfg.ProdamusAPIURL == "" {
 		return fmt.Errorf("PRODAMUS_API_URL is required")
+	}
+	if cfg.PrivateResourceID == "" {
+		return fmt.Errorf("PRIVATE_RESOURCE_ID is required")
+	}
+	if cfg.PrivateResourceType != ResourceTypeGroup && cfg.PrivateResourceType != ResourceTypeChannel {
+		return fmt.Errorf("PRIVATE_RESOURCE_TYPE must be 'group' or 'channel', got: %s", cfg.PrivateResourceType)
 	}
 	return nil
 }
