@@ -55,6 +55,10 @@ func WriteJSONRetry[T any](path string, data T, attempts int) error {
 		if err == nil {
 			return nil
 		}
+		// Exponential backoff: 100ms, 200ms, 300ms...
+		if i < attempts-1 {
+			time.Sleep(time.Duration(100*(i+1)) * time.Millisecond)
+		}
 	}
 	return fmt.Errorf("WriteJSON failed after %d attempts: %w", attempts, err)
 }

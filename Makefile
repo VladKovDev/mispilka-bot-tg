@@ -9,3 +9,6 @@ run: build
 
 run-dev:
 	go run cmd/app/main.go
+
+test:
+	go test -v ./...

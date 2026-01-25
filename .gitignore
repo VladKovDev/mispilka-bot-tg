@@ -13,9 +13,6 @@ data/*
 !data/example/
 !data/example/**
 
-# bv (beads viewer) local config and caches
-.bv/
-
 # Git worktrees for isolated development
 .worktrees/
 

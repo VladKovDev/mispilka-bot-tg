@@ -15,47 +15,21 @@ var (
 	ErrMessagesSaveFailed = errors.New("failed to save messages")
 )
 
-// MessageData defines a message in the flow
-type MessageData struct {
-	Timing         domainScenario.Timing       `json:"timing"`
-	TemplateFile   string                       `json:"template_file,omitempty"`
-	Photos         []string                     `json:"photos,omitempty"`
-	InlineKeyboard *InlineKeyboardConfig        `json:"inline_keyboard,omitempty"`
-}
-
-// InlineKeyboardConfig defines inline keyboard structure
-type InlineKeyboardConfig struct {
-	ButtonSetRef string                    `json:"button_set_ref,omitempty"`
-	Rows         []InlineKeyboardRowConfig `json:"rows,omitempty"`
-}
-
-// InlineKeyboardRowConfig defines a keyboard row
-type InlineKeyboardRowConfig struct {
-	Buttons []InlineKeyboardButtonConfig `json:"buttons"`
-}
-
-// InlineKeyboardButtonConfig defines a button
-type InlineKeyboardButtonConfig struct {
-	Type     string `json:"type"`
-	Text     string `json:"text"`
-	URL      string `json:"url,omitempty"`
-	Callback string `json:"callback,omitempty"`
-}
-
 // ScenarioMessages manages scenario messages persistence
+// Uses domain types directly to avoid duplication
 type ScenarioMessages struct {
 	filePath string
 	mu       sync.RWMutex
 
-	MessagesList []string              `json:"messages_list"`
-	Messages     map[string]MessageData `json:"messages"`
+	MessagesList []string                                `json:"messages_list"`
+	Messages     map[string]domainScenario.MessageData `json:"messages"`
 }
 
 // NewScenarioMessages creates a new scenario messages
 func NewScenarioMessages(filePath string) *ScenarioMessages {
 	return &ScenarioMessages{
 		filePath:     filePath,
-		Messages:     make(map[string]MessageData),
+		Messages:     make(map[string]domainScenario.MessageData),
 		MessagesList: make([]string, 0),
 	}
 }
@@ -82,8 +56,8 @@ func (m *ScenarioMessages) Load() error {
 
 // Save saves the messages to disk
 func (m *ScenarioMessages) Save() error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	// Ensure directory exists
 	if err := os.MkdirAll(filepath.Dir(m.filePath), 0755); err != nil {
@@ -103,41 +77,15 @@ func (m *ScenarioMessages) Save() error {
 }
 
 // ToDomain converts to domain scenario messages
+// Now returns a copy since we're using domain types directly
 func (m *ScenarioMessages) ToDomain() domainScenario.ScenarioMessages {
 	msgs := domainScenario.ScenarioMessages{
-		MessagesList: m.MessagesList,
-		Messages:     make(map[string]domainScenario.MessageData),
+		MessagesList: make([]string, len(m.MessagesList)),
+		Messages:     make(map[string]domainScenario.MessageData, len(m.Messages)),
 	}
+	copy(msgs.MessagesList, m.MessagesList)
 	for id, md := range m.Messages {
-		msgs.Messages[id] = domainScenario.MessageData{
-			Timing:         md.Timing,
-			TemplateFile:   md.TemplateFile,
-			Photos:         md.Photos,
-			InlineKeyboard: convertInlineKeyboard(md.InlineKeyboard),
-		}
+		msgs.Messages[id] = md
 	}
 	return msgs
-}
-
-func convertInlineKeyboard(ik *InlineKeyboardConfig) *domainScenario.InlineKeyboardConfig {
-	if ik == nil {
-		return nil
-	}
-	domainIK := &domainScenario.InlineKeyboardConfig{
-		Rows: make([]domainScenario.InlineKeyboardRowConfig, len(ik.Rows)),
-	}
-	for i, row := range ik.Rows {
-		domainIK.Rows[i] = domainScenario.InlineKeyboardRowConfig{
-			Buttons: make([]domainScenario.InlineKeyboardButtonConfig, len(row.Buttons)),
-		}
-		for j, btn := range row.Buttons {
-			domainIK.Rows[i].Buttons[j] = domainScenario.InlineKeyboardButtonConfig{
-				Type:     btn.Type,
-				Text:     btn.Text,
-				URL:      btn.URL,
-				Callback: btn.Callback,
-			}
-		}
-	}
-	return domainIK
 }

@@ -345,11 +345,11 @@ func (s *Service) AddMessage(req *AddMessageRequest) error {
 	}
 
 	// Add message data
-	messages.Messages[req.MessageID] = MessageData{
+	messages.Messages[req.MessageID] = domainScenario.MessageData{
 		Timing:         req.Timing,
 		TemplateFile:   req.TemplateFile,
 		Photos:         req.Photos,
-		InlineKeyboard: convertInlineKeyboardFromDomain(req.InlineKeyboard),
+		InlineKeyboard: req.InlineKeyboard,
 	}
 
 	if err := messages.Save(); err != nil {
@@ -385,7 +385,7 @@ func (s *Service) UpdateMessage(req *UpdateMessageRequest) error {
 		msgData.Photos = *req.Photos
 	}
 	if req.InlineKeyboard != nil {
-		msgData.InlineKeyboard = convertInlineKeyboardFromDomain(req.InlineKeyboard)
+		msgData.InlineKeyboard = req.InlineKeyboard
 	}
 
 	messages.Messages[req.MessageID] = msgData
@@ -459,27 +459,4 @@ func (s *Service) GetFirstMessageID(scenarioID string) (string, error) {
 	}
 
 	return scenario.Messages.MessagesList[0], nil
-}
-
-func convertInlineKeyboardFromDomain(ik *domainScenario.InlineKeyboardConfig) *InlineKeyboardConfig {
-	if ik == nil {
-		return nil
-	}
-	result := &InlineKeyboardConfig{
-		Rows: make([]InlineKeyboardRowConfig, len(ik.Rows)),
-	}
-	for i, row := range ik.Rows {
-		result.Rows[i] = InlineKeyboardRowConfig{
-			Buttons: make([]InlineKeyboardButtonConfig, len(row.Buttons)),
-		}
-		for j, btn := range row.Buttons {
-			result.Rows[i].Buttons[j] = InlineKeyboardButtonConfig{
-				Type:     btn.Type,
-				Text:     btn.Text,
-				URL:      btn.URL,
-				Callback: btn.Callback,
-			}
-		}
-	}
-	return result
 }

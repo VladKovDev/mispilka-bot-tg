@@ -50,8 +50,8 @@ func (s *Service) Load() error {
 
 // Save saves broadcasts to disk
 func (s *Service) Save() error {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	return s.saveLocked()
 }

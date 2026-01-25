@@ -1,7 +1,10 @@
 package scenario_scheduler
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -10,14 +13,15 @@ import (
 
 // ScheduleInfo contains schedule information
 type ScheduleInfo struct {
-	ChatID       string
-	ScenarioID   string
-	MessageIndex int
-	ScheduledAt  time.Time
+	ChatID       string    `json:"chat_id"`
+	ScenarioID   string    `json:"scenario_id"`
+	MessageIndex int       `json:"message_index"`
+	ScheduledAt  time.Time `json:"scheduled_at"`
 }
 
 // Scheduler manages per-scenario message scheduling
 type Scheduler struct {
+	filePath  string
 	mu        sync.RWMutex
 	schedules map[string]*ScheduleInfo // chatID -> ScheduleInfo
 	timers    map[string]*time.Timer   // chatID -> Timer
@@ -25,8 +29,9 @@ type Scheduler struct {
 }
 
 // NewScheduler creates a new scenario scheduler
-func NewScheduler() *Scheduler {
+func NewScheduler(filePath string) *Scheduler {
 	return &Scheduler{
+		filePath:  filePath,
 		schedules: make(map[string]*ScheduleInfo),
 		timers:    make(map[string]*time.Timer),
 		callbacks: make(chan *ScheduleInfo, 100),
@@ -69,6 +74,12 @@ func (s *Scheduler) ScheduleNextMessage(chatID string, sc *domainScenario.Scenar
 	})
 	s.timers[chatID] = timer
 
+	// Persist schedules
+	if err := s.persistLocked(); err != nil {
+		// Log but don't fail the scheduling
+		fmt.Printf("Warning: failed to persist schedules: %v\n", err)
+	}
+
 	return scheduledAt, nil
 }
 
@@ -104,6 +115,69 @@ func (s *Scheduler) CancelSchedule(chatID string) {
 		delete(s.timers, chatID)
 	}
 	delete(s.schedules, chatID)
+
+	// Persist after cancellation
+	if err := s.persistLocked(); err != nil {
+		fmt.Printf("Warning: failed to persist schedules: %v\n", err)
+	}
+}
+
+// Load restores schedules from disk
+func (s *Scheduler) Load() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	data, err := os.ReadFile(s.filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // No backup file, that's fine
+		}
+		return fmt.Errorf("failed to read schedules: %w", err)
+	}
+
+	var backups []*ScheduleInfo
+	if err := json.Unmarshal(data, &backups); err != nil {
+		return fmt.Errorf("failed to unmarshal schedules: %w", err)
+	}
+
+	// Restore schedules
+	s.RestoreSchedules(backups)
+	return nil
+}
+
+// Persist saves current schedules to disk
+func (s *Scheduler) Persist() error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.persistLocked()
+}
+
+// persistLocked saves schedules to disk (caller must hold lock)
+func (s *Scheduler) persistLocked() error {
+	if s.filePath == "" {
+		return nil // No file path configured, skip persistence
+	}
+
+	// Ensure directory exists
+	if err := os.MkdirAll(filepath.Dir(s.filePath), 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	schedules := make([]*ScheduleInfo, 0, len(s.schedules))
+	for _, info := range s.schedules {
+		schedules = append(schedules, info)
+	}
+
+	data, err := json.MarshalIndent(schedules, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal schedules: %w", err)
+	}
+
+	if err := os.WriteFile(s.filePath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write schedules: %w", err)
+	}
+
+	return nil
 }
 
 // GetSchedule retrieves schedule info for a user

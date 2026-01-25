@@ -63,8 +63,8 @@ func (c *Config) Load() error {
 
 // Save saves the config to disk
 func (c *Config) Save() error {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	// Ensure directory exists
 	if err := os.MkdirAll(filepath.Dir(c.filePath), 0755); err != nil {

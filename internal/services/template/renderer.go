@@ -6,23 +6,28 @@ import (
 
 // Renderer handles template variable substitution
 type Renderer struct {
-	// varPattern matches {{variable_name}} placeholders
-	// Matches {{ followed by one or more word characters (letters, digits, underscore) followed by }}
+	// varPattern matches {{scope.variable_name}} placeholders (scoped syntax only)
+	// Matches {{scope.variable}} where scope and variable are word characters
+	// Does NOT match {{variable}} without a scope
 	varPattern *regexp.Regexp
 }
 
 // NewRenderer creates a new template renderer
 func NewRenderer() *Renderer {
 	return &Renderer{
-		varPattern: regexp.MustCompile(`\{\{(\w+)\}\}`),
+		// Requires scoped variables: {{scope.variable}} syntax only
+		// Matches {{scope.variable}} where scope and variable are word characters
+		varPattern: regexp.MustCompile(`\{\{(\w+\.\w+(?:\.\w+)*)\}\}`),
 	}
 }
 
-// Render replaces {{variable}} placeholders in template with values from vars map
+// Render replaces {{scope.variable}} placeholders in template with values from vars map
+// Requires scoped syntax only: {{bot.name}}, {{user.name}}, {{scenario.name}}
+// Does NOT support {{variable}} without a scope - these will be left unchanged
 // If a variable is not found in the map, the placeholder is left unchanged
 func (r *Renderer) Render(template string, vars map[string]string) (string, error) {
 	result := r.varPattern.ReplaceAllStringFunc(template, func(match string) string {
-		// Extract variable name from {{varName}}
+		// Extract variable name from {{scope.varName}}
 		varName := match[2 : len(match)-2] // Remove {{ and }}
 
 		// Look up the variable

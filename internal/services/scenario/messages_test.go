@@ -15,7 +15,7 @@ func TestScenarioMessages_LoadSave(t *testing.T) {
 	// Create messages
 	msgs := NewScenarioMessages(messagesPath)
 	msgs.MessagesList = []string{"msg_1", "msg_2"}
-	msgs.Messages = map[string]MessageData{
+	msgs.Messages = map[string]domainScenario.MessageData{
 		"msg_1": {
 			Timing: domainScenario.Timing{Hours: 0, Minutes: 0},
 			TemplateFile: "msg_1.md",

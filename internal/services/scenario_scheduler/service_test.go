@@ -1,6 +1,7 @@
 package scenario_scheduler
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -8,7 +9,7 @@ import (
 )
 
 func TestScheduler_ScheduleNextMessage(t *testing.T) {
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(filepath.Join(t.TempDir(), "schedules.json"))
 
 	sc := &domainScenario.Scenario{
 		ID:   "test",
@@ -44,7 +45,7 @@ func TestScheduler_ScheduleNextMessage(t *testing.T) {
 }
 
 func TestScheduler_GetNextMessage(t *testing.T) {
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(filepath.Join(t.TempDir(), "schedules.json"))
 
 	sc := &domainScenario.Scenario{
 		Messages: domainScenario.ScenarioMessages{
@@ -76,7 +77,7 @@ func TestScheduler_GetNextMessage(t *testing.T) {
 }
 
 func TestScheduler_GetNextMessage_NoMoreMessages(t *testing.T) {
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(filepath.Join(t.TempDir(), "schedules.json"))
 
 	sc := &domainScenario.Scenario{
 		Messages: domainScenario.ScenarioMessages{
@@ -101,7 +102,7 @@ func TestScheduler_GetNextMessage_NoMoreMessages(t *testing.T) {
 }
 
 func TestScheduler_CancelSchedule(t *testing.T) {
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(filepath.Join(t.TempDir(), "schedules.json"))
 
 	sc := &domainScenario.Scenario{
 		ID:   "test",
@@ -146,7 +147,7 @@ func TestScheduler_CancelSchedule(t *testing.T) {
 }
 
 func TestScheduler_GetSchedule(t *testing.T) {
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(filepath.Join(t.TempDir(), "schedules.json"))
 
 	// Get non-existent schedule
 	_, ok := scheduler.GetSchedule("nonexistent")
@@ -198,7 +199,7 @@ func TestScheduler_GetSchedule(t *testing.T) {
 }
 
 func TestScheduler_ExportSchedules(t *testing.T) {
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(filepath.Join(t.TempDir(), "schedules.json"))
 
 	sc := &domainScenario.Scenario{
 		ID:   "test",
@@ -238,7 +239,7 @@ func TestScheduler_ExportSchedules(t *testing.T) {
 }
 
 func TestScheduler_RestoreSchedules(t *testing.T) {
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(filepath.Join(t.TempDir(), "schedules.json"))
 
 	now := time.Now().Add(1 * time.Hour)
 
@@ -266,7 +267,7 @@ func TestScheduler_RestoreSchedules(t *testing.T) {
 }
 
 func TestScheduler_RestoreSchedules_Past(t *testing.T) {
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(filepath.Join(t.TempDir(), "schedules.json"))
 
 	// Schedule in the past
 	now := time.Now().Add(-1 * time.Hour)
@@ -295,7 +296,7 @@ func TestScheduler_RestoreSchedules_Past(t *testing.T) {
 }
 
 func TestScheduler_Callbacks(t *testing.T) {
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(filepath.Join(t.TempDir(), "schedules.json"))
 
 	// Verify callbacks channel exists
 	callbacks := scheduler.Callbacks()

@@ -202,12 +202,37 @@ func migrateUsers() error {
 		return err
 	}
 
+	// Read schedule backup to determine user progress
+	type ScheduleBackup map[string]string // chatID -> nextSendTime
+	var schedule ScheduleBackup
+	if scheduleData, err := os.ReadFile("data/schedule_backup.json"); err == nil {
+		json.Unmarshal(scheduleData, &schedule)
+	} // ignore error if file doesn't exist
+
 	// Migrate each user
-	for _, user := range users {
+	for chatID, user := range users {
+		// Calculate current message index based on user state
+		messageIndex := 0
+		totalMessages := len(user.MessagesList)
+
+		// If user has joined the group, they've completed all messages
+		if user.JoinedGroup {
+			messageIndex = totalMessages
+		} else if user.HasPaid() {
+			// If paid but not joined, check if they have a scheduled message
+			if _, hasSchedule := schedule[chatID]; !hasSchedule {
+				// No schedule means they've completed the flow
+				messageIndex = totalMessages
+			}
+			// Otherwise, they're still in progress - index stays at current position
+			// We can't determine exact position from legacy scheduler, so they'll restart
+		}
+		// If not paid, index stays at 0
+
 		// Create scenario state from legacy fields
 		scenarioState := &services.UserScenarioState{
 			Status:              services.StatusActive,
-			CurrentMessageIndex: 0,
+			CurrentMessageIndex: messageIndex,
 			PaymentDate:         user.PaymentDate,
 			PaymentLink:         user.PaymentLink,
 			InviteLink:          user.InviteLink,
@@ -215,9 +240,11 @@ func migrateUsers() error {
 			JoinedAt:            user.JoinedAt,
 		}
 
-		// Set current message index based on remaining messages
-		if len(user.MessagesList) > 0 {
-			scenarioState.CurrentMessageIndex = 0 // Will be calculated from sent messages
+		// If completed, mark as completed
+		if messageIndex >= totalMessages && totalMessages > 0 {
+			scenarioState.Status = services.StatusCompleted
+			now := time.Now()
+			scenarioState.CompletedAt = &now
 		}
 
 		// Update user structure
@@ -284,8 +311,8 @@ func createButtonRegistry() error {
 func createBotGlobals() error {
 	globals := map[string]interface{}{
 		"variables": map[string]string{
-			"bot_name":     "Mispilka Bot",
-			"support_link": "https://t.me/support",
+			"bot.bot_name":     "Mispilka Bot",
+			"bot.support_link": "https://t.me/support",
 		},
 	}
 

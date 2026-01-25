@@ -55,8 +55,8 @@ func (r *Registry) Load() error {
 
 // Save saves the registry to disk
 func (r *Registry) Save() error {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	// Ensure directory exists
 	if err := os.MkdirAll(filepath.Dir(r.filePath), 0755); err != nil {

@@ -221,6 +221,9 @@ func (s *UserService) CompleteScenario(chatID, scenarioID string) error {
 
 	user := users[chatID]
 	state := user.Scenarios[scenarioID]
+	if state == nil {
+		return fmt.Errorf("scenario %s not started for user %s", scenarioID, chatID)
+	}
 
 	now := time.Now()
 	state.Status = services.StatusCompleted
@@ -241,6 +244,9 @@ func (s *UserService) StopScenario(chatID, scenarioID string) error {
 
 	user := users[chatID]
 	state := user.Scenarios[scenarioID]
+	if state == nil {
+		return fmt.Errorf("scenario %s not started for user %s", scenarioID, chatID)
+	}
 	state.Status = services.StatusStopped
 
 	user.Scenarios[scenarioID] = state
@@ -258,6 +264,9 @@ func (s *UserService) SetPaymentInfo(chatID, scenarioID string, paymentDate time
 
 	user := users[chatID]
 	state := user.Scenarios[scenarioID]
+	if state == nil {
+		return fmt.Errorf("scenario %s not started for user %s", scenarioID, chatID)
+	}
 
 	state.PaymentDate = &paymentDate
 	state.PaymentLink = paymentLink
@@ -277,6 +286,9 @@ func (s *UserService) SetInviteLink(chatID, scenarioID, inviteLink string) error
 
 	user := users[chatID]
 	state := user.Scenarios[scenarioID]
+	if state == nil {
+		return fmt.Errorf("scenario %s not started for user %s", scenarioID, chatID)
+	}
 
 	state.InviteLink = inviteLink
 
@@ -295,6 +307,9 @@ func (s *UserService) SetJoinedGroup(chatID, scenarioID string, joined bool, joi
 
 	user := users[chatID]
 	state := user.Scenarios[scenarioID]
+	if state == nil {
+		return fmt.Errorf("scenario %s not started for user %s", scenarioID, chatID)
+	}
 
 	state.JoinedGroup = joined
 	state.JoinedAt = joinedAt

@@ -60,8 +60,8 @@ func (r *Registry) loadLocked() error {
 
 // Save saves broadcasts to disk
 func (r *Registry) Save() error {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	return r.saveLocked()
 }

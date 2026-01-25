@@ -86,7 +86,6 @@ Environment variables (see `.env.example`):
 
 - **CLAUDE.md** - Main orchestration rules, agent delegation pattern
 - **AGENTS.md** - Health workflow agents, specialized workers
-- **Beads** - Task tracking (run `bd prime` on session start)
 
 ## Quality Gates
 

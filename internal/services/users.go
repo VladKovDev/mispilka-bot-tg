@@ -4,10 +4,14 @@ import (
 	"fmt"
 	"mispilkabot/internal/models"
 	"strconv"
+	"sync"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
+
+// usersMutex protects concurrent access to users.json file
+var usersMutex sync.RWMutex
 
 // User represents a user in the system
 type User struct {
@@ -54,6 +58,9 @@ type UserMap map[string]User
 // AddUser creates a new user entry in the users.json file.
 // Returns an error if the user data cannot be read, prepared, or written.
 func AddUser(message *tgbotapi.Message) error {
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
+
 	data, err := ReadJSONRetry[UserMap]("data/users.json", 3)
 	if err != nil {
 		return fmt.Errorf("failed to read users data: %w", err)
@@ -89,6 +96,9 @@ func (data UserMap) userData(message *tgbotapi.Message) error {
 }
 
 func GetUser(chatID string) (User, error) {
+	usersMutex.RLock()
+	defer usersMutex.RUnlock()
+
 	var users UserMap
 	var user User
 
@@ -178,6 +188,9 @@ func SetJoinedGroup(chatID string, joined bool) error {
 // ChangeUser updates an existing user entry in the users.json file.
 // Returns an error if the user data cannot be read, the user doesn't exist, or the write fails.
 func ChangeUser(chatID string, userData User) error {
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
+
 	users, err := ReadJSONRetry[UserMap]("data/users.json", 3)
 	if err != nil {
 		return fmt.Errorf("failed to read users data: %w", err)
@@ -225,6 +238,9 @@ func (u *User) GetJoinedAt() time.Time {
 // Returns true if the user doesn't exist (is new), false if they exist.
 // Returns an error if the user data cannot be read.
 func IsNewUser(chatID string) (bool, error) {
+	usersMutex.RLock()
+	defer usersMutex.RUnlock()
+
 	users, err := ReadJSONRetry[UserMap]("data/users.json", 3)
 	if err != nil {
 		return false, fmt.Errorf("failed to load users: %w", err)
@@ -236,6 +252,9 @@ func IsNewUser(chatID string) (bool, error) {
 // GetAllUsers returns all users from the users.json file.
 // Returns an error if the user data cannot be read.
 func GetAllUsers() (UserMap, error) {
+	usersMutex.RLock()
+	defer usersMutex.RUnlock()
+
 	users, err := ReadJSONRetry[UserMap]("data/users.json", 3)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load users: %w", err)
@@ -265,6 +284,9 @@ func GetUserScenario(chatID, scenarioID string) (*UserScenarioState, error) {
 
 // SetUserScenario sets user's state for a specific scenario
 func SetUserScenario(chatID, scenarioID string, state *UserScenarioState) error {
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
+
 	users, err := ReadJSONRetry[UserMap]("data/users.json", 3)
 	if err != nil {
 		return fmt.Errorf("failed to read users data: %w", err)
@@ -305,6 +327,9 @@ func GetUserActiveScenario(chatID string) (string, *UserScenarioState, error) {
 
 // SetUserActiveScenario sets user's active scenario
 func SetUserActiveScenario(chatID, scenarioID string) error {
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
+
 	users, err := ReadJSONRetry[UserMap]("data/users.json", 3)
 	if err != nil {
 		return fmt.Errorf("failed to read users data: %w", err)

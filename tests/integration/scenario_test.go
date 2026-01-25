@@ -17,7 +17,7 @@ func TestScenarioLifecycle(t *testing.T) {
 	// Setup - use the actual base directory structure
 	scenarioService := scenarioutil.NewService(tmpDir)
 
-	scheduler := scenario_scheduler.NewScheduler()
+	scheduler := scenario_scheduler.NewScheduler(filepath.Join(tmpDir, "schedules.json"))
 
 	wizardDir := filepath.Join(tmpDir, "wizards")
 	wizardManager := wizard.NewManager(wizardDir)
