@@ -3,7 +3,6 @@ package telegram
 import (
 	"fmt"
 	"log"
-	"strconv"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -107,16 +106,16 @@ func (b *Bot) handleAdminCommand(message *tgbotapi.Message) {
 // scenariosCommand shows all scenarios as buttons
 func (b *Bot) scenariosCommand(message *tgbotapi.Message) error {
 	if b.scenarioService == nil {
-		return b.sendMessage(fmt.Sprint(message.Chat.ID), "Scenario service not initialized")
+		return b.sendMessage(message.Chat.ID, "Scenario service not initialized")
 	}
 
 	scenarios, err := b.scenarioService.ListScenarios()
 	if err != nil {
-		return b.sendMessage(fmt.Sprint(message.Chat.ID), "Failed to load scenarios: "+err.Error())
+		return b.sendMessage(message.Chat.ID, "Failed to load scenarios: "+err.Error())
 	}
 
 	if len(scenarios) == 0 {
-		return b.sendMessage(fmt.Sprint(message.Chat.ID), "No scenarios found. Use /create_scenario to create one.")
+		return b.sendMessage(message.Chat.ID, "No scenarios found. Use /create_scenario to create one.")
 	}
 
 	// Build message with scenario list
@@ -145,14 +144,14 @@ func (b *Bot) scenariosCommand(message *tgbotapi.Message) error {
 // createScenarioCommand starts scenario creation wizard
 func (b *Bot) createScenarioCommand(message *tgbotapi.Message) error {
 	if b.wizardManager == nil {
-		return b.sendMessage(fmt.Sprint(message.Chat.ID), "Wizard manager not initialized")
+		return b.sendMessage(message.Chat.ID, "Wizard manager not initialized")
 	}
 
 	userID := fmt.Sprint(message.From.ID)
 
 	state, err := b.wizardManager.Start(userID, wizard.WizardTypeCreateScenario)
 	if err != nil {
-		return b.sendMessage(fmt.Sprint(message.Chat.ID), "Failed to start wizard: "+err.Error())
+		return b.sendMessage(message.Chat.ID, "Failed to start wizard: "+err.Error())
 	}
 
 	return b.sendWizardMessage(message.Chat.ID, state)
@@ -161,50 +160,50 @@ func (b *Bot) createScenarioCommand(message *tgbotapi.Message) error {
 // setDefaultScenarioCommand sets a scenario as default
 func (b *Bot) setDefaultScenarioCommand(message *tgbotapi.Message, payload string) error {
 	if payload == "" {
-		return b.sendMessage(fmt.Sprint(message.Chat.ID), "Usage: /set_default_scenario {scenario_id}")
+		return b.sendMessage(message.Chat.ID, "Usage: /set_default_scenario {scenario_id}")
 	}
 
 	if b.scenarioService == nil {
-		return b.sendMessage(fmt.Sprint(message.Chat.ID), "Scenario service not initialized")
+		return b.sendMessage(message.Chat.ID, "Scenario service not initialized")
 	}
 
 	if err := b.scenarioService.SetDefaultScenario(payload); err != nil {
-		return b.sendMessage(fmt.Sprint(message.Chat.ID), "Failed: "+err.Error())
+		return b.sendMessage(message.Chat.ID, "Failed: "+err.Error())
 	}
 
-	return b.sendMessage(fmt.Sprint(message.Chat.ID), fmt.Sprintf("✅ Scenario '%s' is now the default", payload))
+	return b.sendMessage(message.Chat.ID, fmt.Sprintf("✅ Scenario '%s' is now the default", payload))
 }
 
 // deleteScenarioCommand deletes a scenario
 func (b *Bot) deleteScenarioCommand(message *tgbotapi.Message, payload string) error {
 	if payload == "" {
-		return b.sendMessage(fmt.Sprint(message.Chat.ID), "Usage: /delete_scenario {scenario_id}")
+		return b.sendMessage(message.Chat.ID, "Usage: /delete_scenario {scenario_id}")
 	}
 
 	if b.scenarioService == nil {
-		return b.sendMessage(fmt.Sprint(message.Chat.ID), "Scenario service not initialized")
+		return b.sendMessage(message.Chat.ID, "Scenario service not initialized")
 	}
 
 	if err := b.scenarioService.DeleteScenario(payload); err != nil {
-		return b.sendMessage(fmt.Sprint(message.Chat.ID), "Failed: "+err.Error())
+		return b.sendMessage(message.Chat.ID, "Failed: "+err.Error())
 	}
 
-	return b.sendMessage(fmt.Sprint(message.Chat.ID), fmt.Sprintf("🗑️ Scenario '%s' deleted", payload))
+	return b.sendMessage(message.Chat.ID, fmt.Sprintf("🗑️ Scenario '%s' deleted", payload))
 }
 
 // demoScenarioCommand demonstrates a scenario with template highlighting
 func (b *Bot) demoScenarioCommand(message *tgbotapi.Message, payload string) error {
 	if payload == "" {
-		return b.sendMessage(fmt.Sprint(message.Chat.ID), "Usage: /demo_scenario {scenario_id}")
+		return b.sendMessage(message.Chat.ID, "Usage: /demo_scenario {scenario_id}")
 	}
 
 	if b.scenarioService == nil {
-		return b.sendMessage(fmt.Sprint(message.Chat.ID), "Scenario service not initialized")
+		return b.sendMessage(message.Chat.ID, "Scenario service not initialized")
 	}
 
 	sc, err := b.scenarioService.GetScenario(payload)
 	if err != nil {
-		return b.sendMessage(fmt.Sprint(message.Chat.ID), "Failed: "+err.Error())
+		return b.sendMessage(message.Chat.ID, "Failed: "+err.Error())
 	}
 
 	// Build demo message with scenario details
@@ -214,13 +213,13 @@ func (b *Bot) demoScenarioCommand(message *tgbotapi.Message, payload string) err
 // createBroadcastCommand starts broadcast creation wizard
 func (b *Bot) createBroadcastCommand(message *tgbotapi.Message) error {
 	// TODO: Implement broadcast wizard
-	return b.sendMessage(fmt.Sprint(message.Chat.ID), "Broadcast creation coming soon!")
+	return b.sendMessage(message.Chat.ID, "Broadcast creation coming soon!")
 }
 
 // sendBroadcastCommand sends a broadcast
 func (b *Bot) sendBroadcastCommand(message *tgbotapi.Message) error {
 	// TODO: Implement broadcast sending
-	return b.sendMessage(fmt.Sprint(message.Chat.ID), "Broadcast sending coming soon!")
+	return b.sendMessage(message.Chat.ID, "Broadcast sending coming soon!")
 }
 
 // Helper methods
@@ -318,13 +317,8 @@ func (b *Bot) sendMessageWithKeyboard(chatID int64, text string, keyboard tgbota
 }
 
 // sendMessage sends a simple text message
-func (b *Bot) sendMessage(chatID string, text string) error {
-	parsedID, err := strconv.ParseInt(chatID, 10, 64)
-	if err != nil {
-		return fmt.Errorf("failed to parse chatID %s: %w", chatID, err)
-	}
-
-	msg := tgbotapi.NewMessage(parsedID, text)
+func (b *Bot) sendMessage(chatID int64, text string) error {
+	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ParseMode = "HTML"
 
 	if _, err := b.bot.Send(msg); err != nil {

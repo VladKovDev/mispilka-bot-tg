@@ -27,13 +27,16 @@ type Bot struct {
 type Media []interface{}
 
 func NewBot(bot *tgbotapi.BotAPI, cfg *config.Config, scenarioService *scenario.Service, wizardManager *wizard.Manager) *Bot {
-	return &Bot{
+	b := &Bot{
 		bot:             bot,
 		cfg:             cfg,
 		commandService:  NewCommandService(bot),
 		scenarioService: scenarioService,
 		wizardManager:   wizardManager,
 	}
+	// Register admin commands
+	b.registerAdminCommands()
+	return b
 }
 
 // GenerateInviteLink creates a new invite link for the specified group
