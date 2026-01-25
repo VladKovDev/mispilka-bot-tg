@@ -6,6 +6,8 @@ import (
 	"log"
 	"mispilkabot/config"
 	"mispilkabot/internal/services"
+	"mispilkabot/internal/services/scenario"
+	"mispilkabot/internal/services/wizard"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,18 +17,22 @@ import (
 )
 
 type Bot struct {
-	bot            *tgbotapi.BotAPI
-	cfg            *config.Config
-	commandService *CommandService
+	bot             *tgbotapi.BotAPI
+	cfg             *config.Config
+	commandService  *CommandService
+	scenarioService *scenario.Service
+	wizardManager   *wizard.Manager
 }
 
 type Media []interface{}
 
-func NewBot(bot *tgbotapi.BotAPI, cfg *config.Config) *Bot {
+func NewBot(bot *tgbotapi.BotAPI, cfg *config.Config, scenarioService *scenario.Service, wizardManager *wizard.Manager) *Bot {
 	return &Bot{
-		bot:            bot,
-		cfg:            cfg,
-		commandService: NewCommandService(bot),
+		bot:             bot,
+		cfg:             cfg,
+		commandService:  NewCommandService(bot),
+		scenarioService: scenarioService,
+		wizardManager:   wizardManager,
 	}
 }
 
@@ -62,7 +68,7 @@ func (b *Bot) Start(ctx context.Context) {
 	services.CheckStorage("data/messages.json")
 
 	err := services.SetSchedules(func(chatID string) {
-		b.sendMessage(chatID)
+		b.sendScheduledMessage(chatID)
 	})
 
 	if err != nil {
@@ -197,10 +203,10 @@ func (b *Bot) acceptCallback(callback *tgbotapi.CallbackQuery) {
 	}
 
 	// Start message scheduling
-	services.SetSchedule(time.Now(), userID, b.sendMessage)
+	services.SetSchedule(time.Now(), userID, b.sendScheduledMessage)
 }
 
-func (b *Bot) sendMessage(chatID string) {
+func (b *Bot) sendScheduledMessage(chatID string) {
 	data, err := services.GetUser(chatID)
 	if err != nil {
 		log.Printf("person data fetching error: %v", err)
@@ -281,7 +287,7 @@ func (b *Bot) sendMessage(chatID string) {
 		return
 	}
 
-	services.SetNextSchedule(chatID, last, b.sendMessage)
+	services.SetNextSchedule(chatID, last, b.sendScheduledMessage)
 }
 
 func (b *Bot) SendInviteMessage(userID string, inviteLink string) {

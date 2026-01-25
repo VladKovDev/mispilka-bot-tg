@@ -32,6 +32,11 @@ func (b *Bot) handleCommand(message *tgbotapi.Message) {
 		if err := b.usersCommand(message); err != nil {
 			log.Printf("Failed to handle /users command: %v", err)
 		}
+	default:
+		// Check if it's an admin command
+		if b.isAdmin(message.From.ID) {
+			b.handleAdminCommand(message)
+		}
 	}
 }
 

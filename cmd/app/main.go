@@ -5,6 +5,8 @@ import (
 	"log"
 	"mispilkabot/config"
 	"mispilkabot/internal/server"
+	"mispilkabot/internal/services/scenario"
+	"mispilkabot/internal/services/wizard"
 	tgbot "mispilkabot/internal/telegram"
 	"os"
 	"os/signal"
@@ -31,7 +33,17 @@ func main() {
 
 	srv := server.New(cfg)
 
-	bot := tgbot.NewBot(tgAPI, cfg)
+	// Initialize scenario service
+	scenarioService := scenario.NewService("data")
+
+	// Initialize wizard manager
+	wizardManager := wizard.NewManager("data/wizards")
+	if err := wizardManager.Initialize(); err != nil {
+		log.Printf("Failed to initialize wizard manager: %v", err)
+		// Continue anyway - wizard functionality will be limited
+	}
+
+	bot := tgbot.NewBot(tgAPI, cfg, scenarioService, wizardManager)
 
 	// Register bot commands with Telegram API
 	if err := bot.RegisterCommands(ctx); err != nil {

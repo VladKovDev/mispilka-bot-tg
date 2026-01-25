@@ -14,14 +14,22 @@ import (
 type CommandService struct {
 	bot    *tgbotapi.BotAPI
 	mapper *CommandMapper
+	// commands allows dynamic command registration
+	commands []command.Command
 }
 
 // NewCommandService creates a new CommandService instance.
 func NewCommandService(bot *tgbotapi.BotAPI) *CommandService {
 	return &CommandService{
-		bot:    bot,
-		mapper: NewCommandMapper(),
+		bot:      bot,
+		mapper:   NewCommandMapper(),
+		commands: []command.Command{},
 	}
+}
+
+// RegisterCommand registers a new command dynamically.
+func (s *CommandService) RegisterCommand(cmd *command.Command) {
+	s.commands = append(s.commands, *cmd)
 }
 
 // RegisterCommands registers bot commands with Telegram API using role-based visibility.
