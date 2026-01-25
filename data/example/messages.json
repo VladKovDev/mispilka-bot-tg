@@ -121,7 +121,20 @@
       "template_file": "group_leave_new_link.md"
     },
     "start": {
-      "template_file": "start.md"
+      "template_file": "start.md",
+      "inline_keyboard": {
+        "rows": [
+          {
+            "buttons": [
+              {
+                "text": "Принимаю",
+                "type": "callback",
+                "callback_data": "accept"
+              }
+            ]
+          }
+        ]
+      }
     }
   }
 }
