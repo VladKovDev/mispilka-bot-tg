@@ -30,6 +30,16 @@ func NewBot(bot *tgbotapi.BotAPI, cfg *config.Config) *Bot {
 	}
 }
 
+// IsGroupMode returns true if the bot is configured for group mode
+func (b *Bot) IsGroupMode() bool {
+	return b.cfg.PrivateResourceType == config.ResourceTypeGroup
+}
+
+// IsChannelMode returns true if the bot is configured for channel mode
+func (b *Bot) IsChannelMode() bool {
+	return b.cfg.PrivateResourceType == config.ResourceTypeChannel
+}
+
 // GenerateInviteLink creates a new invite link for the specified group
 func (b *Bot) GenerateInviteLink(userID, groupID string) (string, error) {
 	return services.GenerateInviteLink(userID, groupID, b.bot)
@@ -69,9 +79,9 @@ func (b *Bot) Start(ctx context.Context) {
 		log.Fatalf("SetSchedules failed to restore scheduled messages: %v", err)
 	}
 
-	privateChatID, err := parseID(b.cfg.PrivateGroupID)
+	privateChatID, err := parseID(b.cfg.PrivateResourceID)
 	if err != nil {
-		log.Fatalf("Failed to parse PrivateGroupID from config: %v", err)
+		log.Fatalf("Failed to parse PrivateResourceID from config: %v", err)
 	}
 
 	b.handleUpdates(ctx, b.initUpdatesChannel(), privateChatID)
@@ -433,7 +443,7 @@ func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateCh
 			// Generate new invite link for paid users who left on their own
 			if newStatus == "left" && user.HasPaid() {
 				log.Printf("[LEAVE] processing voluntary leave for paid user %s", userID)
-				newInviteLink, err := b.GenerateInviteLink(userID, b.cfg.PrivateGroupID)
+				newInviteLink, err := b.GenerateInviteLink(userID, b.cfg.PrivateResourceID)
 				if err != nil {
 					log.Printf("[LEAVE] failed to generate new invite link for paid user %s: %v", userID, err)
 				} else {
@@ -502,7 +512,7 @@ func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateCh
 				log.Printf("[JOIN] user %s not found in database - they need to start a chat with the bot first. inviteLink=%s", userID, inviteLink)
 				// Still revoke the invite link if present for security
 				if inviteLink != "" {
-					if err := b.RevokeInviteLink(b.cfg.PrivateGroupID, inviteLink); err != nil {
+					if err := b.RevokeInviteLink(b.cfg.PrivateResourceID, inviteLink); err != nil {
 						log.Printf("[JOIN] failed to revoke invite link for unknown user %s: %v", userID, err)
 					} else {
 						log.Printf("[JOIN] revoked invite link for unknown user %s", userID)
@@ -538,7 +548,7 @@ func (b *Bot) handleChatMember(chatMember *tgbotapi.ChatMemberUpdated, privateCh
 
 			// Revoke the invite link for security (one-time use) - only if it's the user's stored link
 			if inviteLink != "" && inviteLink == user.InviteLink {
-				if err := b.RevokeInviteLink(b.cfg.PrivateGroupID, inviteLink); err != nil {
+				if err := b.RevokeInviteLink(b.cfg.PrivateResourceID, inviteLink); err != nil {
 					log.Printf("[JOIN] failed to revoke invite link for user %s: %v", userID, err)
 				} else {
 					log.Printf("[JOIN] invite link revoked for user %s", userID)
@@ -596,7 +606,7 @@ func (b *Bot) handleNewChatMemberMessage(newMember *tgbotapi.User, message *tgbo
 
 	// Revoke the user's stored invite link for security (one-time use)
 	if user.InviteLink != "" {
-		if err := b.RevokeInviteLink(b.cfg.PrivateGroupID, user.InviteLink); err != nil {
+		if err := b.RevokeInviteLink(b.cfg.PrivateResourceID, user.InviteLink); err != nil {
 			log.Printf("[JOIN_MSG] Failed to revoke invite link for user %s: %v", userID, err)
 		} else {
 			log.Printf("[JOIN_MSG] Invite link revoked for user %s: %s", userID, user.InviteLink)
@@ -641,7 +651,7 @@ func (b *Bot) handleLeftChatMemberMessage(leftMember *tgbotapi.User, message *tg
 	// If user left voluntarily and has paid, generate new invite link
 	if leftVoluntarily && user.HasPaid() {
 		log.Printf("[LEAVE_MSG] Processing voluntary leave for paid user %s", userID)
-		newInviteLink, err := b.GenerateInviteLink(userID, b.cfg.PrivateGroupID)
+		newInviteLink, err := b.GenerateInviteLink(userID, b.cfg.PrivateResourceID)
 		if err != nil {
 			log.Printf("[LEAVE_MSG] Failed to generate new invite link for paid user %s: %v", userID, err)
 		} else {
