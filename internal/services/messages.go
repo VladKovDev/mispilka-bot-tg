@@ -244,3 +244,25 @@ func GetPhoto(messageName string) (string, error) {
 	}
 	return path, nil
 }
+
+// GetStartButtonText возвращает текст кнопки для start-сообщения.
+// Сначала пытается получить текст из inline_keyboard конфигурации в messages.json.
+// Если кнопка не настроена, возвращает текст по умолчанию "Принимаю".
+func GetStartButtonText() (string, error) {
+	keyboard, err := GetInlineKeyboard("start")
+	if err != nil || keyboard == nil || len(keyboard.Rows) == 0 {
+		// Fallback к тексту по умолчанию
+		return "Принимаю", nil
+	}
+
+	// Берём текст из первой кнопки первой строки
+	if len(keyboard.Rows[0].Buttons) > 0 {
+		text := keyboard.Rows[0].Buttons[0].Text
+		if text != "" {
+			return text, nil
+		}
+	}
+
+	// Fallback если текст пустой
+	return "Принимаю", nil
+}
