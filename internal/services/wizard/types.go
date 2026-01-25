@@ -141,3 +141,81 @@ func (w *WizardState) Clone() *WizardState {
 	}
 	return clone
 }
+
+// EditMode and tracking methods
+
+// SetEditMode sets the edit mode and target step
+func (w *WizardState) SetEditMode(enabled bool, targetStep WizardStep) {
+	w.Set("edit_mode", enabled)
+	w.Set("edit_target_step", string(targetStep))
+}
+
+// IsEditMode returns true if in edit mode
+func (w *WizardState) IsEditMode() bool {
+	val, ok := w.Get("edit_mode")
+	if !ok {
+		return false
+	}
+	if b, ok := val.(bool); ok {
+		return b
+	}
+	return false
+}
+
+// GetEditTargetStep returns the step being edited
+func (w *WizardState) GetEditTargetStep() WizardStep {
+	val := w.GetString("edit_target_step")
+	return WizardStep(val)
+}
+
+// SetCurrentSection sets the current wizard section
+func (w *WizardState) SetCurrentSection(section string) {
+	w.Set("current_section", section)
+}
+
+// GetCurrentSection returns the current wizard section
+func (w *WizardState) GetCurrentSection() string {
+	return w.GetString("current_section")
+}
+
+// SetCurrentMessageIndex sets the current message index
+func (w *WizardState) SetCurrentMessageIndex(index int) {
+	w.Set("current_message_index", index)
+}
+
+// GetCurrentMessageIndex returns the current message index
+func (w *WizardState) GetCurrentMessageIndex() int {
+	return w.GetInt("current_message_index")
+}
+
+// IncrementMessagesCreated increments the message counter
+func (w *WizardState) IncrementMessagesCreated() {
+	count := w.GetMessagesCreated()
+	w.Set("messages_created", count+1)
+}
+
+// GetMessagesCreated returns the number of messages created
+func (w *WizardState) GetMessagesCreated() int {
+	return w.GetInt("messages_created")
+}
+
+// GetLastConfirmedStep returns the last confirmed step
+func (w *WizardState) GetLastConfirmedStep() WizardStep {
+	val := w.GetString("last_confirmed_step")
+	return WizardStep(val)
+}
+
+// SetLastConfirmedStep sets the last confirmed step
+func (w *WizardState) SetLastConfirmedStep(step WizardStep) {
+	w.Set("last_confirmed_step", string(step))
+}
+
+// GetScenarioID returns the scenario ID being created/edited
+func (w *WizardState) GetScenarioID() string {
+	return w.GetString("scenario_id")
+}
+
+// SetScenarioID sets the scenario ID
+func (w *WizardState) SetScenarioID(id string) {
+	w.Set("scenario_id", id)
+}
