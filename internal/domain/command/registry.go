@@ -3,7 +3,6 @@ package command
 // AllCommands contains all available bot commands
 var AllCommands = CommandSlice{
 	{Name: "start", Description: "Начать работу с ботом", Role: RolePublic},
-	{Name: "restart", Description: "Перезапустить бота", Role: RolePublic},
 	{Name: "users", Description: "Список пользователей", Role: RoleAdmin},
 }
 
